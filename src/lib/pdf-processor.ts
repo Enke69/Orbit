@@ -17,10 +17,16 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  // Dynamic import to avoid SSR issues with pdfjs-dist
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
 
-  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+  // Disable web worker — not available in Node.js serverless environments
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    isEvalSupported: false,
+  });
   const pdf = await loadingTask.promise;
   const pageCount = pdf.numPages;
 

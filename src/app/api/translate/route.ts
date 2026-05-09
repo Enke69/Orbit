@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     } else {
       extracted = await extractDocx(buffer) as typeof extracted;
     }
-  } catch {
+  } catch (err) {
+    console.error("File extraction error:", err);
     return NextResponse.json({ error: "Could not read file. Make sure it is a valid PDF or Word document." }, { status: 422 });
   }
 
