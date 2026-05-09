@@ -2,24 +2,50 @@
 
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Mail, Chrome } from "lucide-react";
+import { Mail, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 
+type Tab = "password" | "magic";
+
 export default function SignInPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>("password");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  const [loading, setLoading] = useState<"google" | "email" | null>(null);
+  const [loading, setLoading] = useState<"google" | "submit" | null>(null);
+  const [error, setError] = useState("");
 
   async function handleGoogle() {
     setLoading("google");
     await signIn("google", { callbackUrl: "/dashboard" });
   }
 
-  async function handleEmail(e: React.FormEvent) {
+  async function handlePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading("submit");
+    const result = await signIn("credentials", {
+      email,
+      password,
+      callbackUrl: "/dashboard",
+      redirect: false,
+    });
+    setLoading(null);
+    if (result?.error) {
+      setError("Incorrect email or password.");
+    } else {
+      router.push(result?.url ?? "/dashboard");
+    }
+  }
+
+  async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
-    setLoading("email");
+    setLoading("submit");
     await signIn("resend", { email, callbackUrl: "/dashboard", redirect: false });
     setEmailSent(true);
     setLoading(null);
@@ -27,7 +53,6 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
-      {/* Background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-cosmos-purple-bright/8 blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-md">
@@ -47,9 +72,94 @@ export default function SignInPage() {
           <p className="mt-2 text-cosmos-dust text-sm">Sign in to start translating documents</p>
         </div>
 
-        {/* Card */}
         <div className="glass-card rounded-2xl p-8 shadow-cosmic">
-          {emailSent ? (
+          {/* Google */}
+          <Button
+            variant="outline"
+            className="w-full mb-6 gap-3"
+            size="lg"
+            onClick={handleGoogle}
+            loading={loading === "google"}
+          >
+            <GoogleIcon />
+            Continue with Google
+          </Button>
+
+          {/* Tabs */}
+          <div className="flex rounded-xl bg-cosmos-nebula/40 p-1 mb-6 border border-cosmos-purple-bright/10">
+            <button
+              onClick={() => { setTab("password"); setError(""); }}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                tab === "password"
+                  ? "bg-cosmos-purple-bright/20 text-cosmos-star"
+                  : "text-cosmos-dust hover:text-cosmos-star"
+              }`}
+            >
+              Password
+            </button>
+            <button
+              onClick={() => { setTab("magic"); setError(""); }}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                tab === "magic"
+                  ? "bg-cosmos-purple-bright/20 text-cosmos-star"
+                  : "text-cosmos-dust hover:text-cosmos-star"
+              }`}
+            >
+              Magic link
+            </button>
+          </div>
+
+          {tab === "password" ? (
+            <form onSubmit={handlePassword} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-cosmos-dust mb-1.5">
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl bg-cosmos-nebula/50 border border-cosmos-purple-bright/20 text-cosmos-star placeholder:text-cosmos-dust/40 focus:outline-none focus:border-cosmos-purple-bright/60 focus:ring-1 focus:ring-cosmos-purple-bright/40 transition-colors text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-cosmos-dust mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPw ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your password"
+                    required
+                    className="w-full px-4 py-2.5 pr-11 rounded-xl bg-cosmos-nebula/50 border border-cosmos-purple-bright/20 text-cosmos-star placeholder:text-cosmos-dust/40 focus:outline-none focus:border-cosmos-purple-bright/60 focus:ring-1 focus:ring-cosmos-purple-bright/40 transition-colors text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw(!showPw)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-cosmos-dust/50 hover:text-cosmos-dust transition-colors"
+                  >
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" className="w-full" size="lg" loading={loading === "submit"}>
+                Sign in
+              </Button>
+            </form>
+          ) : emailSent ? (
             <div className="text-center py-4">
               <div className="w-14 h-14 rounded-full bg-cosmos-purple-bright/15 border border-cosmos-purple-bright/30 flex items-center justify-center mx-auto mb-4">
                 <Mail size={24} className="text-cosmos-purple-light" />
@@ -67,60 +177,37 @@ export default function SignInPage() {
               </button>
             </div>
           ) : (
-            <>
-              {/* Google */}
-              <Button
-                variant="outline"
-                className="w-full mb-4 gap-3"
-                size="lg"
-                onClick={handleGoogle}
-                loading={loading === "google"}
-              >
-                <GoogleIcon />
-                Continue with Google
-              </Button>
-
-              {/* Divider */}
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-cosmos-purple-bright/15" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="px-3 bg-cosmos-deep text-cosmos-dust">or continue with email</span>
-                </div>
+            <form onSubmit={handleMagicLink} className="space-y-4">
+              <div>
+                <label htmlFor="magic-email" className="block text-sm font-medium text-cosmos-dust mb-1.5">
+                  Email address
+                </label>
+                <input
+                  id="magic-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl bg-cosmos-nebula/50 border border-cosmos-purple-bright/20 text-cosmos-star placeholder:text-cosmos-dust/40 focus:outline-none focus:border-cosmos-purple-bright/60 focus:ring-1 focus:ring-cosmos-purple-bright/40 transition-colors text-sm"
+                />
               </div>
-
-              {/* Email */}
-              <form onSubmit={handleEmail} className="space-y-4">
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-cosmos-dust mb-1.5">
-                    Email address
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    className="w-full px-4 py-2.5 rounded-xl bg-cosmos-nebula/50 border border-cosmos-purple-bright/20 text-cosmos-star placeholder:text-cosmos-dust/40 focus:outline-none focus:border-cosmos-purple-bright/60 focus:ring-1 focus:ring-cosmos-purple-bright/40 transition-colors text-sm"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full gap-2"
-                  size="lg"
-                  loading={loading === "email"}
-                >
-                  <Mail size={16} />
-                  Send magic link
-                </Button>
-              </form>
-            </>
+              <Button type="submit" className="w-full gap-2" size="lg" loading={loading === "submit"}>
+                <Mail size={16} />
+                Send magic link
+              </Button>
+            </form>
           )}
         </div>
 
-        <p className="text-center mt-6 text-xs text-cosmos-dust/50">
+        <p className="text-center mt-6 text-sm text-cosmos-dust/60">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="text-cosmos-purple-light hover:text-cosmos-star underline transition-colors">
+            Sign up
+          </Link>
+        </p>
+
+        <p className="text-center mt-3 text-xs text-cosmos-dust/40">
           By signing in you agree to our{" "}
           <Link href="/terms" className="underline hover:text-cosmos-dust">Terms</Link>{" "}
           and{" "}
