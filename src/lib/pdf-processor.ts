@@ -56,13 +56,10 @@ export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
   return { blocks, charCount, translatable, pageCount };
 }
 
-// Load bundled Noto Sans TTF — supports Cyrillic/Mongolian characters
+// Load Noto Sans Cyrillic subset — embedded as base64 to avoid filesystem issues
 async function fetchCyrillicFont(): Promise<Uint8Array> {
-  const { readFile } = await import("fs/promises");
-  const { join } = await import("path");
-  const fontPath = join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
-  const buffer = await readFile(fontPath);
-  return new Uint8Array(buffer);
+  const { NOTO_SANS_CYRILLIC } = await import("./noto-sans-b64");
+  return new Uint8Array(NOTO_SANS_CYRILLIC);
 }
 
 export async function buildPdf(
