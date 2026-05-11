@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Loader2, CheckCircle2, XCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -27,13 +27,7 @@ export function TranslationProgress({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const processingRef = useRef(false);
 
-  useEffect(() => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-    processAllChunks();
-  }, [translationId, totalChunks]);
-
-  async function processAllChunks() {
+  const processAllChunks = useCallback(async () => {
     for (let i = 0; i < totalChunks; i++) {
       if (i === totalChunks - 1) setPhase("building");
 
@@ -68,7 +62,13 @@ export function TranslationProgress({
         return;
       }
     }
-  }
+  }, [translationId, totalChunks, onComplete, onError]);
+
+  useEffect(() => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    processAllChunks();
+  }, [processAllChunks]);
 
   const progress =
     phase === "done"
