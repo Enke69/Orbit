@@ -22,7 +22,7 @@ export default function HomePage() {
         <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-cosmos-star mb-6 leading-tight max-w-4xl">
           Translate any document{" "}
           <span className="bg-gradient-to-r from-cosmos-purple-light via-cosmos-blue-light to-cosmos-cyan-glow bg-clip-text text-transparent glow-text">
-            into Mongolian
+            instantly
           </span>
         </h1>
 

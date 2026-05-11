@@ -6,7 +6,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Layers, History, LogOut, User, ChevronDown, Zap } from "lucide-react";
+import { Layers, History, LogOut, User, ChevronDown, Zap, Type } from "lucide-react";
 
 export function Navbar() {
   const { data: session } = useSession();
@@ -34,7 +34,8 @@ export function Navbar() {
           {/* Nav links */}
           {session && (
             <div className="hidden md:flex items-center gap-1">
-              <NavLink href="/translate" icon={<Layers size={15} />}>Translate</NavLink>
+              <NavLink href="/translate" icon={<Layers size={15} />}>Documents</NavLink>
+              <NavLink href="/text" icon={<Type size={15} />}>Text</NavLink>
               <NavLink href="/history" icon={<History size={15} />}>History</NavLink>
             </div>
           )}

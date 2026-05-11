@@ -733,7 +733,7 @@ export function PdfTranslatorClient({ file, onComplete, onError }: Props) {
 
       {/* Download */}
       {isDone && downloadUrl && (
-        <a href={downloadUrl} download={file.name.replace(/\.pdf$/i, "") + "_mongolian.pdf"}>
+        <a href={downloadUrl} download={file.name.replace(/\.pdf$/i, "") + "_translated.pdf"}>
           <Button size="lg" className="gap-2 w-full">
             <Download size={16} /> Download translated PDF
           </Button>

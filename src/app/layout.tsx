@@ -5,12 +5,12 @@ import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
   icons: { icon: "/images/orbit-logo.png" },
-  title: "Orbit — AI Document Translation to Mongolian",
-  description: "Upload any PDF or Word document and get a professional Mongolian translation in minutes. Powered by GPT-5.4 mini.",
-  keywords: ["Mongolian translation", "AI translation", "document translation", "PDF translation", "орчуулга"],
+  title: "Orbit — AI Document Translation",
+  description: "Upload any PDF or Word document and get a professional translation in minutes. Powered by AI.",
+  keywords: ["AI translation", "document translation", "PDF translation", "орчуулга"],
   openGraph: {
     title: "Orbit — AI Document Translation",
-    description: "Professional AI-powered document translation to Mongolian",
+    description: "Professional AI-powered document translation",
     siteName: "Orbit",
   },
 };

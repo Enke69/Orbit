@@ -58,7 +58,7 @@ export default async function HistoryPage() {
                     </span>
                     {t.sourceLanguage && (
                       <span className="text-xs text-cosmos-dust">
-                        {t.sourceLanguage} → Mongolian
+                        {t.sourceLanguage} → Translated
                       </span>
                     )}
                     <span className="text-xs text-cosmos-dust">

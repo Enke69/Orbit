@@ -103,7 +103,7 @@ export default function TranslatePage() {
           Translate a document
         </h1>
         <p className="text-cosmos-dust">
-          Upload a PDF or Word file. We&apos;ll translate the text to Mongolian and send it back.
+          Upload a PDF or Word file and get it translated. Download the result instantly.
         </p>
       </div>
 
@@ -158,7 +158,7 @@ export default function TranslatePage() {
             size="lg"
             className="w-full gap-2"
           >
-            Translate to Mongolian <ArrowRight size={16} />
+            Translate <ArrowRight size={16} />
           </Button>
 
           <p className="text-center text-xs text-cosmos-dust/50">
@@ -191,12 +191,12 @@ export default function TranslatePage() {
           </div>
           <div>
             <p className="font-display font-semibold text-lg text-cosmos-star">Translation complete!</p>
-            <p className="text-sm text-cosmos-dust mt-1">Your document has been translated to Mongolian.</p>
+            <p className="text-sm text-cosmos-dust mt-1">Your document has been translated.</p>
           </div>
           {downloadUrl && (
             <a
               href={downloadUrl}
-              download={file ? file.name.replace(/\.[^.]+$/, "") + "_mongolian.pdf" : "translated.pdf"}
+              download={file ? file.name.replace(/\.[^.]+$/, "") + "_translated.pdf" : "translated.pdf"}
             >
               <Button size="lg" className="gap-2 w-full">
                 <Download size={16} /> Download translated document
