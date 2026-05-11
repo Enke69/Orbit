@@ -1,5 +1,5 @@
 // PDF processing: extract text blocks then rebuild as a new PDF
-// We use pdfjs-dist for reading and pdf-lib for writing
+// pdf-parse for reading (Node.js native, no worker needed), pdf-lib for writing
 
 export interface PdfBlock {
   type: "text" | "placeholder";
@@ -17,69 +17,28 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
-
-  // Disable web worker — not available in Node.js serverless environments
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(buffer),
-    useSystemFonts: true,
-    isEvalSupported: false,
-  });
-  const pdf = await loadingTask.promise;
-  const pageCount = pdf.numPages;
+  // Import from lib path to skip pdf-parse's test-file auto-loader
+  const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js" as string);
+  const data = await pdfParse(buffer);
+  const pageCount: number = data.numpages;
 
   const blocks: PdfBlock[] = [];
   let blockIndex = 0;
 
-  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
+  // Split into paragraphs on blank lines, then on single newlines
+  const paragraphs = (data.text as string)
+    .split(/\n{2,}/)
+    .flatMap((chunk: string) => chunk.split("\n"))
+    .map((p: string) => p.trim())
+    .filter((p: string) => p.length > 5);
 
-    // Group text items into paragraphs by vertical proximity
-    const items = textContent.items as Array<{ str: string; transform: number[] }>;
-    let currentParagraph = "";
-    let lastY: number | null = null;
-
-    for (const item of items) {
-      const y = item.transform[5];
-      const text = item.str.trim();
-
-      if (!text) continue;
-
-      if (lastY !== null && Math.abs(y - lastY) > 15 && currentParagraph) {
-        blocks.push({
-          type: "text",
-          text: currentParagraph.trim(),
-          pageIndex: pageNum - 1,
-          blockIndex: blockIndex++,
-        });
-        currentParagraph = text;
-      } else {
-        currentParagraph += (currentParagraph ? " " : "") + text;
-      }
-      lastY = y;
-    }
-
-    if (currentParagraph.trim()) {
-      blocks.push({
-        type: "text",
-        text: currentParagraph.trim(),
-        pageIndex: pageNum - 1,
-        blockIndex: blockIndex++,
-      });
-    }
-
-    // Add page separator
-    if (pageNum < pageCount) {
-      blocks.push({
-        type: "placeholder",
-        placeholder: `[PAGEBREAK]`,
-        pageIndex: pageNum - 1,
-        blockIndex: blockIndex++,
-      });
-    }
+  for (const paragraph of paragraphs) {
+    blocks.push({
+      type: "text",
+      text: paragraph,
+      pageIndex: 0,
+      blockIndex: blockIndex++,
+    });
   }
 
   const charCount = blocks

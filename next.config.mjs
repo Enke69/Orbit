@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ["mammoth", "pdf-lib", "canvas", "pdfjs-dist"],
+    serverComponentsExternalPackages: ["mammoth", "pdf-lib", "canvas", "pdf-parse"],
   },
   images: {
     remotePatterns: [
