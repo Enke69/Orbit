@@ -17,7 +17,9 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  const { default: pdfParse } = await import("pdf-parse");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfMod = await import("pdf-parse") as any;
+  const pdfParse = pdfMod.default ?? pdfMod;
   const data = await pdfParse(buffer);
   const pageCount: number = data.numpages;
 
