@@ -49,8 +49,7 @@ const PDFJS_CDNS = [
 ];
 
 async function loadPdfjsLib(): Promise<unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const win = window as any;
+  const win = window as any; // needed to access dynamically loaded pdfjsLib
   if (win.pdfjsLib) return win.pdfjsLib;
 
   for (const cdn of PDFJS_CDNS) {
