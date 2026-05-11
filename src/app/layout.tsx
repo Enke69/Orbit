@@ -4,7 +4,7 @@ import { Toaster } from "react-hot-toast";
 import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/images/orbit-logo.png" },
   title: "Orbit — AI Document Translation to Mongolian",
   description: "Upload any PDF or Word document and get a professional Mongolian translation in minutes. Powered by GPT-5.4 mini.",
   keywords: ["Mongolian translation", "AI translation", "document translation", "PDF translation", "орчуулга"],

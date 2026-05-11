@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -18,13 +19,13 @@ export function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="relative w-8 h-8">
-              <div className="absolute inset-0 rounded-full bg-cosmos-purple-bright/20 group-hover:bg-cosmos-purple-bright/30 transition-colors" />
-              <div className="absolute inset-1 rounded-full border border-cosmos-purple-bright/50" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-2 h-2 rounded-full bg-cosmos-purple-bright shadow-nebula" />
-              </div>
-            </div>
+            <Image
+              src="/images/orbit-logo.png"
+              alt="Orbit"
+              width={32}
+              height={32}
+              className="rounded-full"
+            />
             <span className="font-display font-bold text-xl text-cosmos-star tracking-tight">
               Orbit
             </span>

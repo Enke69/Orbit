@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Mail, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 type Tab = "password" | "magic";
 
@@ -59,13 +60,7 @@ export default function SignInPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2.5 group">
-            <div className="relative w-10 h-10">
-              <div className="absolute inset-0 rounded-full bg-cosmos-purple-bright/20" />
-              <div className="absolute inset-1.5 rounded-full border border-cosmos-purple-bright/50" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-2.5 h-2.5 rounded-full bg-cosmos-purple-bright shadow-nebula" />
-              </div>
-            </div>
+            <Image src="/images/orbit-logo.png" alt="Orbit" width={40} height={40} className="rounded-full" />
             <span className="font-display font-bold text-2xl text-cosmos-star">Orbit</span>
           </Link>
           <h1 className="mt-6 text-2xl font-bold text-cosmos-star font-display">Welcome back</h1>
