@@ -1,5 +1,5 @@
 // PDF processing: extract text blocks then rebuild as a new PDF
-// pdf-parse for reading (Node.js native, no worker needed), pdf-lib for writing
+// unpdf for reading (serverless-safe, polyfills browser APIs), pdf-lib for writing
 
 export interface PdfBlock {
   type: "text" | "placeholder";
@@ -17,20 +17,19 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  const pdfMod = await import("pdf-parse" as string);
-  const pdfParse = pdfMod.default ?? pdfMod;
-  const data = await pdfParse(buffer);
-  const pageCount: number = data.numpages;
+  const { extractText } = await import("unpdf");
+  const { text, totalPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
+  const pageCount: number = totalPages;
 
   const blocks: PdfBlock[] = [];
   let blockIndex = 0;
 
   // Split into paragraphs on blank lines, then on single newlines
-  const paragraphs = (data.text as string)
+  const paragraphs = text
     .split(/\n{2,}/)
-    .flatMap((chunk: string) => chunk.split("\n"))
-    .map((p: string) => p.trim())
-    .filter((p: string) => p.length > 5);
+    .flatMap((chunk) => chunk.split("\n"))
+    .map((p) => p.trim())
+    .filter((p) => p.length > 5);
 
   for (const paragraph of paragraphs) {
     blocks.push({
