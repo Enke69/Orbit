@@ -305,21 +305,9 @@ function drawTranslatedPage(
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(originalCanvas, 0, 0);
 
-  const BODY_PT = 12;
-  const BODY_PX = BODY_PT * scale;
   const LINE_GAP = 1.18;
   const PAGE_RIGHT = 16;
   const PAGE_BOTTOM = 20;
-
-  const origSizes: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (skipLines.has(i) || translatedMap[i] == null || !lines[i].items.length) continue;
-    const avg = lines[i].items.reduce((s, it) => s + (it.fontSize > 0 ? it.fontSize : 12), 0) / lines[i].items.length;
-    origSizes.push(avg);
-  }
-  origSizes.sort((a, b) => a - b);
-  const medianSize = origSizes.length ? origSizes[Math.floor(origSizes.length / 2)] : BODY_PX;
-  const HEADING_THRESHOLD = medianSize * 1.2;
 
   function wrapText(text: string, maxW: number): string[] {
     const words = text.split(/\s+/).filter(Boolean);
@@ -367,8 +355,9 @@ function drawTranslatedPage(
       continue;
     }
 
-    const isHeading = origAvgFs >= HEADING_THRESHOLD;
-    let drawFs = isHeading ? origAvgFs : BODY_PX;
+    // Use origAvgFs for every line so translated text matches the original
+    // document's font size exactly — avoids the "all body text same size" issue
+    let drawFs = origAvgFs;
     const rightLimit = canvas.width - PAGE_RIGHT;
     const wrapWidth = Math.min(Math.max(bwOrig, rightLimit - minX), rightLimit - minX);
     if (wrapWidth < 20) continue;
@@ -662,6 +651,34 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
             }
           });
           setProgressState(`Page ${pageNum} / ${totalPages}…`, pageBase + ((ci + 1) / chunks.length) * (88 / totalPages));
+        }
+
+        // Quality-check pass: send original + translated pairs back through GPT
+        // with full page context so it can fix cut sentences and orphaned English
+        if (translatableLines.length > 0) {
+          addLog(`Page ${pageNum}: quality check`);
+          try {
+            const originalTexts = translatableLines.map((lt) => lt.text);
+            const translatedTexts = translatableLines.map((lt) => translatedMap[lt._idx] ?? null);
+            const cleanRes = await fetch("/api/translate/cleanup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                original: originalTexts,
+                translated: translatedTexts,
+                targetLanguage,
+              }),
+            });
+            if (cleanRes.ok) {
+              const cleanData = await cleanRes.json();
+              const cleaned: (string | null)[] = cleanData.lines ?? translatedTexts;
+              translatableLines.forEach((lt, li) => {
+                const c = cleaned[li];
+                if (c !== undefined) translatedMap[lt._idx] = c;
+              });
+              addLog(`Page ${pageNum}: quality check done`, "done");
+            }
+          } catch { /* non-critical — continue with first-pass translation */ }
         }
 
         addLog(`Page ${pageNum}: compositing`);
