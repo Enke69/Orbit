@@ -2,6 +2,9 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["mammoth", "pdf-lib", "canvas", "unpdf"],
+    outputFileTracingIncludes: {
+      "/api/translate/chunk": ["./public/fonts/*.ttf"],
+    },
   },
   images: {
     remotePatterns: [
