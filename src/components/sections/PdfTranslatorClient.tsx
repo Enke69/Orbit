@@ -369,7 +369,8 @@ function drawTranslatedPage(
       nextTop = Math.min(nextTop, lines[j].baseY - nxFs * 0.85);
       break;
     }
-    const availH = Math.max(origLineH, nextTop - byTop);
+    // Cap at 1.6× original line height to prevent overlap with the next line
+    const availH = Math.min(Math.max(origLineH, nextTop - byTop), origLineH * 1.6);
 
     const isBold = items.some((it) => /bold/i.test(it.fontName));
     const isItalic = items.some((it) => /italic|oblique/i.test(it.fontName));
@@ -377,7 +378,7 @@ function drawTranslatedPage(
     const isRTL = /[֑-߿‏‫]/.test(translated);
 
     let wrappedLines: string[] = [];
-    const MIN_SCALE = 0.75;
+    const MIN_SCALE = 0.62;
     const initialFs = drawFs;
     for (let tryS = 1.0; tryS >= MIN_SCALE - 0.001; tryS -= 0.1) {
       drawFs = initialFs * tryS;
