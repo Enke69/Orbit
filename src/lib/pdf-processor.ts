@@ -17,8 +17,7 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  // Import from lib path to skip pdf-parse's test-file auto-loader
-  const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js" as string);
+  const { default: pdfParse } = await import("pdf-parse");
   const data = await pdfParse(buffer);
   const pageCount: number = data.numpages;
 
