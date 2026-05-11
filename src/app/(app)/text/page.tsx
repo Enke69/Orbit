@@ -69,7 +69,9 @@ export default function TextTranslatePage() {
   }
 
   async function runTranslation(translateTerms: string[]) {
-    const text = input.trim();
+    // Auto-cleanup before translation: merges mid-sentence line breaks that
+    // appear when copying from PDFs (e.g. "with the\ndifference" → "with the difference")
+    const text = cleanupText(input.trim());
     if (!text) return;
 
     abortRef.current?.abort();
@@ -105,7 +107,21 @@ export default function TextTranslatePage() {
 
       const data = await res.json();
       const translated: (string | null)[] = data.translated ?? [];
-      const result = lines.map((l, i) => translated[i] ?? l).join("\n");
+      const result = lines
+        .map((l, i) => {
+          const t = translated[i];
+          if (t !== null && t !== undefined) return t;
+          // Keep blank lines (paragraph separators)
+          if (!l.trim()) return l;
+          // Drop very short untranslated fragments (≤ 2 words, ≤ 15 chars) —
+          // these are orphaned mid-sentence words from PDF copy-paste that the
+          // model correctly cannot translate in isolation
+          const trimmed = l.trim();
+          if (trimmed.length <= 15 && trimmed.split(/\s+/).length <= 2) return null;
+          return l;
+        })
+        .filter((l): l is string => l !== null)
+        .join("\n");
       setOutput(result);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;

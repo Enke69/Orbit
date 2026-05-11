@@ -338,7 +338,10 @@ function drawTranslatedPage(
     if (skipLines.has(i)) continue;
     const line = lines[i];
     const translated = translatedMap[i];
-    if (!translated?.trim() || !line.items.length) continue;
+    // null/undefined → skip entirely (leave original visible)
+    // "" → erase-only (cover original, draw nothing)
+    // string → cover original, draw translated text
+    if (translated === null || translated === undefined || !line.items.length) continue;
 
     const items = line.items;
     const origAvgFs = items.reduce((s, it) => s + (it.fontSize > 0 ? it.fontSize : 12), 0) / items.length;
@@ -355,6 +358,14 @@ function drawTranslatedPage(
     const bwOrig = maxX - minX + 2, bhOrig = origLineH + 2;
 
     if (overlapsRegion(bx, by, bwOrig, bhOrig, protectedRegions)) continue;
+
+    // Erase-only: cover the orphaned fragment with background, draw nothing
+    if (!translated) {
+      const eraseBg = sampleBackground(ctx, bx, by, bwOrig, bhOrig);
+      ctx.fillStyle = eraseBg;
+      ctx.fillRect(bx, by, bwOrig + 2, bhOrig);
+      continue;
+    }
 
     const isHeading = origAvgFs >= HEADING_THRESHOLD;
     let drawFs = isHeading ? origAvgFs : BODY_PX;
@@ -631,6 +642,7 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
         addLog(`Page ${pageNum}: ${translatableLines.length} lines to translate`);
 
         const chunks = makeChunks(translatableLines, CHUNK_SIZE);
+        // Values: null = skip (show original), "" = erase-only (cover but draw nothing), string = draw
         const translatedMap: Record<number, string | null> = {};
 
         for (let ci = 0; ci < chunks.length; ci++) {
@@ -639,7 +651,15 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
           contextSummary = newContext;
           chunks[ci].forEach((lt, li) => {
             const t = results[li];
-            translatedMap[lt._idx] = (t && !alreadyMongolian(lt.text)) || alreadyMongolian(t ?? "") ? t : null;
+            const rawText = lt.text.trim();
+            // Short fragment that the model couldn't translate (returned null) —
+            // use erase-only so the orphaned English word gets covered rather than
+            // floating visibly in an otherwise-translated canvas
+            if (t === null && rawText.length <= 15 && rawText.split(/\s+/).length <= 2 && !alreadyMongolian(rawText)) {
+              translatedMap[lt._idx] = "";
+            } else {
+              translatedMap[lt._idx] = (t && !alreadyMongolian(lt.text)) || alreadyMongolian(t ?? "") ? t : null;
+            }
           });
           setProgressState(`Page ${pageNum} / ${totalPages}…`, pageBase + ((ci + 1) / chunks.length) * (88 / totalPages));
         }
