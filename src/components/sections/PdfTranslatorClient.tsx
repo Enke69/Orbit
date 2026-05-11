@@ -415,7 +415,7 @@ function drawTranslatedPage(
 
 interface Props {
   file: File;
-  onComplete: () => void;
+  onComplete: (url: string) => void;
   onError: (msg: string) => void;
 }
 
@@ -429,6 +429,7 @@ export function PdfTranslatorClient({ file, onComplete, onError }: Props) {
   const [failed, setFailed] = useState(false);
   const startedRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const totalCharsRef = useRef(0);
 
   function addLog(msg: string, type: LogEntry["type"] = "active") {
     setLog((prev) => [...prev, { msg, type }]);
@@ -448,10 +449,12 @@ export function PdfTranslatorClient({ file, onComplete, onError }: Props) {
   }, []);
 
   async function translateChunk(lineTexts: LineText[], contextSummary: string): Promise<{ results: (string | null)[]; newContext: string }> {
+    const lines = lineTexts.map((lt) => lt.text);
+    totalCharsRef.current += lines.reduce((s, l) => s + l.length, 0);
     const res = await fetch("/api/translate/text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lines: lineTexts.map((lt) => lt.text), contextSummary }),
+      body: JSON.stringify({ lines, contextSummary }),
     });
     if (res.status === 402) throw new Error("Character limit reached. Please top up your credits.");
     if (!res.ok) {
@@ -655,11 +658,23 @@ export function PdfTranslatorClient({ file, onComplete, onError }: Props) {
       const pdfBytes = await outDoc.save();
 
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
+      const blobUrl = URL.createObjectURL(blob);
+      setDownloadUrl(blobUrl);
       setProgressState("Translation complete!", 100);
       addLog("All done!", "done");
-      onComplete();
+
+      // Save to history in background — best-effort, don't block the download
+      try {
+        const fd = new FormData();
+        fd.append("file", new File([blob], file.name, { type: "application/pdf" }));
+        fd.append("filename", file.name);
+        fd.append("charCount", String(totalCharsRef.current));
+        await fetch("/api/translate/save-pdf", { method: "POST", body: fd });
+      } catch {
+        // History save failed — download still works via blob URL
+      }
+
+      onComplete(blobUrl);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Translation failed";
       addLog(msg, "error");

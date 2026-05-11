@@ -7,7 +7,7 @@ import { TranslationProgress } from "@/components/sections/TranslationProgress";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { toast } from "react-hot-toast";
-import { ArrowRight, FileOutput } from "lucide-react";
+import { ArrowRight, FileOutput, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // PDF.js uses browser APIs — load client-side only
@@ -30,6 +30,7 @@ export default function TranslatePage() {
   const [translationId, setTranslationId] = useState<string | null>(null);
   const [totalChunks, setTotalChunks] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   async function handleTranslate() {
     if (!file) return;
@@ -73,7 +74,8 @@ export default function TranslatePage() {
     }
   }
 
-  function handleComplete(_downloadUrl?: string) {
+  function handleComplete(url?: string) {
+    if (url) setDownloadUrl(url);
     setStage("done");
     toast.success("Translation complete!");
   }
@@ -90,6 +92,7 @@ export default function TranslatePage() {
     setStage("upload");
     setLoading(false);
     setTranslationId(null);
+    setDownloadUrl(null);
   }
 
   return (
@@ -182,8 +185,25 @@ export default function TranslatePage() {
       )}
 
       {stage === "done" && (
-        <div className="text-center mt-6">
-          <Button variant="outline" onClick={reset}>
+        <div className="glass-card rounded-2xl p-8 text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto">
+            <Download size={28} className="text-emerald-400" />
+          </div>
+          <div>
+            <p className="font-display font-semibold text-lg text-cosmos-star">Translation complete!</p>
+            <p className="text-sm text-cosmos-dust mt-1">Your document has been translated to Mongolian.</p>
+          </div>
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              download={file ? file.name.replace(/\.[^.]+$/, "") + "_mongolian.pdf" : "translated.pdf"}
+            >
+              <Button size="lg" className="gap-2 w-full">
+                <Download size={16} /> Download translated document
+              </Button>
+            </a>
+          )}
+          <Button variant="outline" onClick={reset} className="w-full">
             Translate another document
           </Button>
         </div>
