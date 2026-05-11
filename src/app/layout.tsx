@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { SessionProvider } from "next-auth/react";
+import { StarBackground } from "@/components/ui/StarBackground";
 
 export const metadata: Metadata = {
   icons: { icon: "/images/orbit-logo.png" },
@@ -24,7 +25,7 @@ export default function RootLayout({
     <html lang="mn" suppressHydrationWarning>
       <body className="antialiased">
         <SessionProvider>
-          <div className="stars-bg" aria-hidden="true" />
+          <StarBackground />
           <div className="relative z-10 min-h-screen">
             {children}
           </div>
