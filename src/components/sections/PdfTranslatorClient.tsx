@@ -197,7 +197,7 @@ function detectTableLines(lines: Line[]): { skipSet: Set<number>; protectedRegio
   const skipSet = new Set<number>();
   const protectedRegions: Region[] = [];
   const captionRe = /^\s*(table|figure|chart|graph|fig\.)\b/i;
-  const BUCKET = 8;
+  const BUCKET = 10;
 
   const xBucketLines = new Map<number, Set<number>>();
   for (let i = 0; i < lines.length; i++) {
@@ -208,31 +208,35 @@ function detectTableLines(lines: Line[]): { skipSet: Set<number>; protectedRegio
     }
   }
   const sharedXs = new Set<number>();
+  // 2 lines sharing an x-bucket is enough to mark it as a column
   xBucketLines.forEach((lineSet, bx) => {
-    if (lineSet.size >= 3) sharedXs.add(bx);
+    if (lineSet.size >= 2) sharedXs.add(bx);
   });
 
   const isTableRow = lines.map((line) => {
-    if (!line.items.length || line.items.length > 8) return false;
+    if (!line.items.length || line.items.length > 15) return false;
     const text = line.items.map((it) => it.str).join("").trim();
-    if (captionRe.test(text)) return false;
+    if (!text || captionRe.test(text)) return false;
     let sharedCount = 0;
     for (const item of line.items) {
       const b = Math.round(item.cx / BUCKET) * BUCKET;
       if (sharedXs.has(b)) sharedCount++;
     }
-    if (sharedCount < 2) return false;
-    if (line.items.length > 1) {
+    if (sharedCount < 1) return false;
+    if (line.items.length >= 2) {
       const sorted = [...line.items].sort((a, b) => a.cx - b.cx);
-      let wideGaps = 0;
+      let gaps = 0;
       for (let k = 1; k < sorted.length; k++) {
         const gap = sorted[k].cx - (sorted[k - 1].cx + sorted[k - 1].width);
-        if (gap > 28) wideGaps++;
+        if (gap > 15) gaps++;
       }
-      if (wideGaps < 1) return false;
+      if (gaps < 1) return false;
+    } else {
+      // Single-item line — only treat as table row if strongly aligned with multiple columns
+      if (sharedCount < 2) return false;
     }
     const avgLen = line.items.reduce((s, it) => s + it.str.trim().length, 0) / line.items.length;
-    return avgLen < 40;
+    return avgLen < 60;
   });
 
   const runs: [number, number][] = [];
@@ -241,7 +245,8 @@ function detectTableLines(lines: Line[]): { skipSet: Set<number>; protectedRegio
     if (i < lines.length && isTableRow[i]) {
       if (runStart < 0) runStart = i;
     } else {
-      if (runStart >= 0 && i - runStart >= 2) runs.push([runStart, i - 1]);
+      // Even a single table-like row is enough
+      if (runStart >= 0 && i - runStart >= 1) runs.push([runStart, i - 1]);
       runStart = -1;
     }
   }
@@ -600,13 +605,14 @@ export function PdfTranslatorClient({ file, onComplete, onError }: Props) {
                   y2: Math.max(...cluster.map((r) => r.y2)) + 6,
                 };
                 protectedRegions.push(region);
-                // Mark lines inside this region as skip
+                // Mark lines inside this region as skip — check any item, not just first
                 for (let li = 0; li < lines.length; li++) {
                   if (!lines[li].items.length) continue;
-                  const it0 = lines[li].items[0];
-                  if (it0.cx >= region.x1 && it0.cx <= region.x2 && it0.cy >= region.y1 && it0.cy <= region.y2) {
-                    skipSet.add(li);
-                  }
+                  const inside = lines[li].items.some((it) =>
+                    it.cx >= region.x1 - 5 && it.cx <= region.x2 + 5 &&
+                    it.cy >= region.y1 - 5 && it.cy <= region.y2 + 5
+                  );
+                  if (inside) skipSet.add(li);
                 }
               }
             }
