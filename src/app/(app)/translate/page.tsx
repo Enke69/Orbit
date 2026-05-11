@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { FileUploader } from "@/components/sections/FileUploader";
 import { TranslationProgress } from "@/components/sections/TranslationProgress";
 import { Button } from "@/components/ui/Button";
@@ -9,8 +10,18 @@ import { toast } from "react-hot-toast";
 import { ArrowRight, FileOutput } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// PDF.js uses browser APIs — load client-side only
+const PdfTranslatorClient = dynamic(
+  () => import("@/components/sections/PdfTranslatorClient").then((m) => m.PdfTranslatorClient),
+  { ssr: false }
+);
+
 type OutputFormat = "docx" | "pdf";
 type Stage = "upload" | "translating" | "done";
+
+function isPdf(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
 
 export default function TranslatePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -22,8 +33,15 @@ export default function TranslatePage() {
 
   async function handleTranslate() {
     if (!file) return;
-    setLoading(true);
 
+    // PDFs go through the client-side canvas pipeline
+    if (isPdf(file)) {
+      setStage("translating");
+      return;
+    }
+
+    // DOCX/DOC goes through server-side pipeline
+    setLoading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -55,7 +73,7 @@ export default function TranslatePage() {
     }
   }
 
-  function handleComplete(downloadUrl: string) {
+  function handleComplete(_downloadUrl?: string) {
     setStage("done");
     toast.success("Translation complete!");
   }
@@ -96,36 +114,38 @@ export default function TranslatePage() {
             <FileUploader onFileSelect={setFile} disabled={loading} />
           </Card>
 
-          {/* Output format */}
-          <Card>
-            <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
-              2. Output format
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {(["pdf", "docx"] as OutputFormat[]).map((fmt) => (
-                <button
-                  key={fmt}
-                  onClick={() => setOutputFormat(fmt)}
-                  className={cn(
-                    "flex items-center gap-3 p-4 rounded-xl border text-left transition-all",
-                    outputFormat === fmt
-                      ? "border-cosmos-purple-bright bg-cosmos-purple-bright/10 shadow-nebula"
-                      : "border-cosmos-purple-bright/20 hover:border-cosmos-purple-bright/40"
-                  )}
-                >
-                  <FileOutput size={18} className={outputFormat === fmt ? "text-cosmos-purple-light" : "text-cosmos-dust"} />
-                  <div>
-                    <p className={cn("font-medium text-sm", outputFormat === fmt ? "text-cosmos-star" : "text-cosmos-dust")}>
-                      .{fmt.toUpperCase()}
-                    </p>
-                    <p className="text-xs text-cosmos-dust/60 mt-0.5">
-                      {fmt === "docx" ? "Word document" : "PDF file"}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Card>
+          {/* Output format — only shown for non-PDF files */}
+          {file && !isPdf(file) && (
+            <Card>
+              <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
+                2. Output format
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {(["pdf", "docx"] as OutputFormat[]).map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => setOutputFormat(fmt)}
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-xl border text-left transition-all",
+                      outputFormat === fmt
+                        ? "border-cosmos-purple-bright bg-cosmos-purple-bright/10 shadow-nebula"
+                        : "border-cosmos-purple-bright/20 hover:border-cosmos-purple-bright/40"
+                    )}
+                  >
+                    <FileOutput size={18} className={outputFormat === fmt ? "text-cosmos-purple-light" : "text-cosmos-dust"} />
+                    <div>
+                      <p className={cn("font-medium text-sm", outputFormat === fmt ? "text-cosmos-star" : "text-cosmos-dust")}>
+                        .{fmt.toUpperCase()}
+                      </p>
+                      <p className="text-xs text-cosmos-dust/60 mt-0.5">
+                        {fmt === "docx" ? "Word document" : "PDF file"}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Submit */}
           <Button
@@ -144,7 +164,15 @@ export default function TranslatePage() {
         </div>
       )}
 
-      {stage === "translating" && translationId && (
+      {stage === "translating" && file && isPdf(file) && (
+        <PdfTranslatorClient
+          file={file}
+          onComplete={handleComplete}
+          onError={handleError}
+        />
+      )}
+
+      {stage === "translating" && translationId && !isPdf(file!) && (
         <TranslationProgress
           translationId={translationId}
           totalChunks={totalChunks}
