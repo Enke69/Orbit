@@ -56,18 +56,12 @@ export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
   return { blocks, charCount, translatable, pageCount };
 }
 
-// Fetch Noto Sans TTF that supports Cyrillic/Mongolian characters
+// Load bundled Noto Sans TTF — supports Cyrillic/Mongolian characters
 async function fetchCyrillicFont(): Promise<Uint8Array> {
-  // Request TTF format by using an old user-agent — Google Fonts returns TTF for old browsers
-  const cssRes = await fetch(
-    "https://fonts.googleapis.com/css?family=Noto+Sans&subset=cyrillic",
-    { headers: { "User-Agent": "Mozilla/4.0 (compatible; MSIE 6.0)" } }
-  );
-  const css = await cssRes.text();
-  const match = css.match(/url\(([^)]+\.ttf)\)/);
-  if (!match) throw new Error("Could not find Noto Sans TTF URL from Google Fonts");
-  const fontRes = await fetch(match[1]);
-  const buffer = await fontRes.arrayBuffer();
+  const { readFile } = await import("fs/promises");
+  const { join } = await import("path");
+  const fontPath = join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
+  const buffer = await readFile(fontPath);
   return new Uint8Array(buffer);
 }
 
