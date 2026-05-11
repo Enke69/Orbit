@@ -17,8 +17,7 @@ export interface ExtractedPdf {
 }
 
 export async function extractPdf(buffer: Buffer): Promise<ExtractedPdf> {
-  // @ts-ignore – pdf-parse ESM types don't expose a default export
-  const pdfMod = await import("pdf-parse");
+  const pdfMod = await import("pdf-parse" as string);
   const pdfParse = pdfMod.default ?? pdfMod;
   const data = await pdfParse(buffer);
   const pageCount: number = data.numpages;
