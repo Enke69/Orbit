@@ -422,13 +422,14 @@ function drawTranslatedPage(
 interface Props {
   file: File;
   targetLanguage: string;
+  translateTerms?: string[];
   onComplete: (url: string) => void;
   onError: (msg: string) => void;
 }
 
 type LogEntry = { msg: string; type: "active" | "done" | "error" };
 
-export function PdfTranslatorClient({ file, targetLanguage, onComplete, onError }: Props) {
+export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onComplete, onError }: Props) {
   const [phase, setPhase] = useState("Loading PDF.js…");
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -461,7 +462,7 @@ export function PdfTranslatorClient({ file, targetLanguage, onComplete, onError 
     const res = await fetch("/api/translate/text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lines, contextSummary, targetLanguage }),
+      body: JSON.stringify({ lines, contextSummary, targetLanguage, translateTerms }),
     });
     if (res.status === 402) throw new Error("Character limit reached. Please top up your credits.");
     if (!res.ok) {

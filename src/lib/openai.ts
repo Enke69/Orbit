@@ -28,8 +28,13 @@ export function buildTranslationPrompt(
   textChunk: string,
   contextSummary: string,
   detectedLanguage: string,
-  targetLanguage = "Mongolian"
+  targetLanguage = "Mongolian",
+  translateTerms?: string[]
 ): string {
+  const termOverride = translateTerms?.length
+    ? `\n9. OVERRIDE — translate these specific terms into ${targetLanguage} even if they would normally be kept as-is: ${translateTerms.join(", ")}`
+    : "";
+
   return `You are a professional translator specializing in translating documents into ${targetLanguage}.
 
 RULES — follow exactly:
@@ -40,7 +45,7 @@ RULES — follow exactly:
 5. Preserve ALL formatting markers exactly as written — output them verbatim, never translate or modify them: [IMG_1], [TABLE_1], [PAGEBREAK], etc.
 6. Use the previously translated content in <context> to maintain consistent terminology.
 7. Output ONLY the translated text with preserved markers. No explanations, notes, or commentary.
-8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.
+8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.${termOverride}
 
 <context>
 ${contextSummary || "No previous context — this is the beginning of the document."}

@@ -17,6 +17,7 @@ interface JobData {
   contextSummary: string;
   lang: string;
   targetLanguage: string;
+  translateTerms?: string[];
 }
 
 export async function POST(req: NextRequest) {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   // Translate this chunk
   const chunkText = job.chunks[chunkIndex].text;
-  const translated = await translateChunk(chunkText, job.contextSummary, 2, job.targetLanguage ?? "Mongolian");
+  const translated = await translateChunk(chunkText, job.contextSummary, 2, job.targetLanguage ?? "Mongolian", job.translateTerms);
 
   // Update job data with translated chunk and new context
   job.translatedChunks[chunkIndex] = translated;

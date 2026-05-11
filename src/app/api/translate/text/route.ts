@@ -7,7 +7,11 @@ import { FREE_CHARS_PER_MONTH, TRANSLATION_MODEL, getOpenAI } from "@/lib/openai
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-function buildSystemPrompt(targetLanguage: string): string {
+function buildSystemPrompt(targetLanguage: string, translateTerms?: string[]): string {
+  const termOverride = translateTerms?.length
+    ? `\n7. OVERRIDE — translate these specific terms into ${targetLanguage} even if they would normally be kept as named entities: ${translateTerms.join(", ")}`
+    : "";
+
   return `You are a professional document translator.
 Your ONLY task: translate EVERY numbered line into ${targetLanguage}.
 
@@ -21,7 +25,7 @@ RULES:
 3. Do NOT translate: specific named entities (person names, place names, brand names, product names), URLs, citation markers like [1], code snippets, numbers, formulas, or units.
 4. Generic descriptive phrases and section titles MUST be translated even if they sound technical.
 5. A line ending with a hyphen (-) is a word broken across lines — translate just that fragment, keep the hyphen.
-6. Do NOT add explanations, markdown, notes, or commentary of any kind.`;
+6. Do NOT add explanations, markdown, notes, or commentary of any kind.${termOverride}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -31,10 +35,11 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = session.user.id;
-  const { lines, contextSummary = "", targetLanguage = "Mongolian" } = (await req.json()) as {
+  const { lines, contextSummary = "", targetLanguage = "Mongolian", translateTerms } = (await req.json()) as {
     lines: string[];
     contextSummary?: string;
     targetLanguage?: string;
+    translateTerms?: string[];
   };
 
   if (!lines?.length) {
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
   const response = await openai.chat.completions.create({
     model: TRANSLATION_MODEL,
     messages: [
-      { role: "system", content: buildSystemPrompt(targetLanguage) },
+      { role: "system", content: buildSystemPrompt(targetLanguage, translateTerms) },
       { role: "user", content: input + contextPart },
     ],
     temperature: 0.1,
