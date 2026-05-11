@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
   const outputFormat = (formData.get("outputFormat") as string) ?? "pdf";
+  const targetLanguage = (formData.get("targetLanguage") as string) ?? "Mongolian";
 
   if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
   if (!isAllowedFileType(file.name)) return NextResponse.json({ error: "Unsupported file type. Use PDF, DOC, or DOCX." }, { status: 400 });
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
     translatedChunks: [] as string[],
     contextSummary: "",
     lang,
+    targetLanguage,
   };
   const jobPath = `${userId}/jobs/${Date.now()}_job.json`;
   await uploadFile(Buffer.from(JSON.stringify(jobData)), jobPath, "application/json");

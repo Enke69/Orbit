@@ -27,19 +27,20 @@ export const PRO_MONTHLY_CHARS = 500_000;
 export function buildTranslationPrompt(
   textChunk: string,
   contextSummary: string,
-  detectedLanguage: string
+  detectedLanguage: string,
+  targetLanguage = "Mongolian"
 ): string {
-  return `You are a professional translator specializing in translating documents into Mongolian (Cyrillic script).
+  return `You are a professional translator specializing in translating documents into ${targetLanguage}.
 
 RULES — follow exactly:
-1. Translate ALL body text into fluent, natural Mongolian.
-2. NEVER translate proper nouns: geographic names (Kentucky, Paris, Amazon River, New York), brand names (Google, iPhone, Microsoft, Toyota), personal names, organization names, and product names. Keep them exactly as written in the source.
+1. Translate ALL body text into fluent, natural ${targetLanguage}.
+2. NEVER translate proper nouns: geographic names, brand names (Google, iPhone, Microsoft, Toyota), personal names, organization names, and product names. Keep them exactly as written in the source.
 3. NEVER translate technical identifiers: URLs, email addresses, file paths, code snippets, chemical formulas, mathematical expressions, model numbers.
 4. Maintain the EXACT same tone and register as the source (formal stays formal, casual stays casual, technical stays technical, legal stays legal).
 5. Preserve ALL formatting markers exactly as written — output them verbatim, never translate or modify them: [IMG_1], [TABLE_1], [PAGEBREAK], etc.
-6. Use the previously translated content in <context> to maintain consistent terminology. If a term was translated a specific way earlier, use the same translation throughout.
+6. Use the previously translated content in <context> to maintain consistent terminology.
 7. Output ONLY the translated text with preserved markers. No explanations, notes, or commentary.
-8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is unless Mongolian convention requires otherwise.
+8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.
 
 <context>
 ${contextSummary || "No previous context — this is the beginning of the document."}
@@ -47,7 +48,7 @@ ${contextSummary || "No previous context — this is the beginning of the docume
 
 <source_language>${detectedLanguage || "auto-detect"}</source_language>
 
-Translate the following text to Mongolian:
+Translate the following text to ${targetLanguage}:
 
 ${textChunk}`;
 }

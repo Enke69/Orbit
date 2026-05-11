@@ -7,10 +7,10 @@ import { TranslationProgress } from "@/components/sections/TranslationProgress";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { toast } from "react-hot-toast";
-import { ArrowRight, FileOutput, Download } from "lucide-react";
+import { ArrowRight, FileOutput, Download, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LANGUAGES, DEFAULT_LANGUAGE, getLanguageName } from "@/lib/languages";
 
-// PDF.js uses browser APIs — load client-side only
 const PdfTranslatorClient = dynamic(
   () => import("@/components/sections/PdfTranslatorClient").then((m) => m.PdfTranslatorClient),
   { ssr: false }
@@ -26,6 +26,7 @@ function isPdf(file: File) {
 export default function TranslatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("pdf");
+  const [targetLanguage, setTargetLanguage] = useState(DEFAULT_LANGUAGE);
   const [stage, setStage] = useState<Stage>("upload");
   const [translationId, setTranslationId] = useState<string | null>(null);
   const [totalChunks, setTotalChunks] = useState(1);
@@ -35,32 +36,23 @@ export default function TranslatePage() {
   async function handleTranslate() {
     if (!file) return;
 
-    // PDFs go through the client-side canvas pipeline
     if (isPdf(file)) {
       setStage("translating");
       return;
     }
 
-    // DOCX/DOC goes through server-side pipeline
     setLoading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("outputFormat", outputFormat);
+      formData.append("targetLanguage", getLanguageName(targetLanguage));
 
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        body: formData,
-      });
-
+      const res = await fetch("/api/translate", { method: "POST", body: formData });
       const data = await res.json();
 
       if (!res.ok) {
-        if (res.status === 402) {
-          toast.error("Character limit reached. Please top up your credits.");
-        } else {
-          toast.error(data.error ?? "Failed to start translation");
-        }
+        toast.error(res.status === 402 ? "Character limit reached. Please top up your credits." : (data.error ?? "Failed to start translation"));
         setLoading(false);
         return;
       }
@@ -97,32 +89,43 @@ export default function TranslatePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-12">
-      {/* Header */}
       <div className="text-center mb-10">
-        <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">
-          Translate a document
-        </h1>
-        <p className="text-cosmos-dust">
-          Upload a PDF or Word file and get it translated. Download the result instantly.
-        </p>
+        <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">Translate a document</h1>
+        <p className="text-cosmos-dust">Upload a PDF or Word file and get it translated. Download the result instantly.</p>
       </div>
 
       {stage === "upload" && (
         <div className="space-y-6">
-          {/* File upload */}
           <Card>
-            <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
-              1. Upload document
-            </h2>
+            <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">1. Upload document</h2>
             <FileUploader onFileSelect={setFile} disabled={loading} />
           </Card>
 
-          {/* Output format — only shown for non-PDF files */}
+          {/* Target language */}
+          <Card>
+            <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
+              2. Target language
+            </h2>
+            <div className="relative">
+              <Globe size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-cosmos-dust/50 pointer-events-none" />
+              <select
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-cosmos-purple-bright/20 text-cosmos-star text-sm appearance-none focus:outline-none focus:border-cosmos-purple-bright/50 transition-colors"
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code} className="bg-[#0d0d1a]">
+                    {l.name} — {l.native}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Card>
+
+          {/* Output format — only for non-PDF */}
           {file && !isPdf(file) && (
             <Card>
-              <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
-                2. Output format
-              </h2>
+              <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">3. Output format</h2>
               <div className="grid grid-cols-2 gap-3">
                 {(["pdf", "docx"] as OutputFormat[]).map((fmt) => (
                   <button
@@ -137,12 +140,8 @@ export default function TranslatePage() {
                   >
                     <FileOutput size={18} className={outputFormat === fmt ? "text-cosmos-purple-light" : "text-cosmos-dust"} />
                     <div>
-                      <p className={cn("font-medium text-sm", outputFormat === fmt ? "text-cosmos-star" : "text-cosmos-dust")}>
-                        .{fmt.toUpperCase()}
-                      </p>
-                      <p className="text-xs text-cosmos-dust/60 mt-0.5">
-                        {fmt === "docx" ? "Word document" : "PDF file"}
-                      </p>
+                      <p className={cn("font-medium text-sm", outputFormat === fmt ? "text-cosmos-star" : "text-cosmos-dust")}>.{fmt.toUpperCase()}</p>
+                      <p className="text-xs text-cosmos-dust/60 mt-0.5">{fmt === "docx" ? "Word document" : "PDF file"}</p>
                     </div>
                   </button>
                 ))}
@@ -150,26 +149,17 @@ export default function TranslatePage() {
             </Card>
           )}
 
-          {/* Submit */}
-          <Button
-            onClick={handleTranslate}
-            disabled={!file}
-            loading={loading}
-            size="lg"
-            className="w-full gap-2"
-          >
+          <Button onClick={handleTranslate} disabled={!file} loading={loading} size="lg" className="w-full gap-2">
             Translate <ArrowRight size={16} />
           </Button>
-
-          <p className="text-center text-xs text-cosmos-dust/50">
-            This uses characters from your monthly allowance.
-          </p>
+          <p className="text-center text-xs text-cosmos-dust/50">This uses characters from your monthly allowance.</p>
         </div>
       )}
 
       {stage === "translating" && file && isPdf(file) && (
         <PdfTranslatorClient
           file={file}
+          targetLanguage={getLanguageName(targetLanguage)}
           onComplete={handleComplete}
           onError={handleError}
         />
@@ -194,18 +184,11 @@ export default function TranslatePage() {
             <p className="text-sm text-cosmos-dust mt-1">Your document has been translated.</p>
           </div>
           {downloadUrl && (
-            <a
-              href={downloadUrl}
-              download={file ? file.name.replace(/\.[^.]+$/, "") + "_translated.pdf" : "translated.pdf"}
-            >
-              <Button size="lg" className="gap-2 w-full">
-                <Download size={16} /> Download translated document
-              </Button>
+            <a href={downloadUrl} download={file ? file.name.replace(/\.[^.]+$/, "") + "_translated.pdf" : "translated.pdf"}>
+              <Button size="lg" className="gap-2 w-full"><Download size={16} /> Download translated document</Button>
             </a>
           )}
-          <Button variant="outline" onClick={reset} className="w-full">
-            Translate another document
-          </Button>
+          <Button variant="outline" onClick={reset} className="w-full">Translate another document</Button>
         </div>
       )}
     </div>

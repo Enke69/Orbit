@@ -32,13 +32,13 @@ export default function HomePage() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-4">
-          <Link href="/translate">
+          <Link href="/text">
             <Button size="lg" className="gap-2">
               Start translating <ArrowRight size={16} />
             </Button>
           </Link>
-          <Link href="/signin">
-            <Button variant="outline" size="lg">Sign in free</Button>
+          <Link href="/translate">
+            <Button variant="outline" size="lg">Translate a document</Button>
           </Link>
         </div>
 

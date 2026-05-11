@@ -58,9 +58,10 @@ export async function translateChunks(
 export async function translateChunk(
   text: string,
   contextSummary: string,
-  retries = 2
+  retries = 2,
+  targetLanguage = "Mongolian"
 ): Promise<string> {
-  const prompt = buildTranslationPrompt(text, contextSummary, "auto-detect");
+  const prompt = buildTranslationPrompt(text, contextSummary, "auto-detect", targetLanguage);
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {

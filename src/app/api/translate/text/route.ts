@@ -7,8 +7,9 @@ import { FREE_CHARS_PER_MONTH, TRANSLATION_MODEL, getOpenAI } from "@/lib/openai
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `You are a professional document translator.
-Your ONLY task: translate EVERY numbered line into Mongolian (Cyrillic script).
+function buildSystemPrompt(targetLanguage: string): string {
+  return `You are a professional document translator.
+Your ONLY task: translate EVERY numbered line into ${targetLanguage}.
 
 OUTPUT FORMAT (mandatory):
 N|||translated text
@@ -16,11 +17,12 @@ N|||translated text
 
 RULES:
 1. Output EXACTLY one result line per input line. Never skip a number, never merge lines.
-2. Translate ALL text into natural, fluent Mongolian Cyrillic — including section headings, titles, and descriptive phrases.
-3. Do NOT translate: specific named entities (person names, place names, game titles like "Valorant" or "CS2", weapon model names like "AK-47"), URLs, citation markers like [1], code snippets, numbers, formulas, or units.
-4. Generic descriptive phrases and section titles (e.g. "In-game economic system", "Rank settings", "Introduction") MUST be translated even if they sound technical.
+2. Translate ALL text into natural, fluent ${targetLanguage} — including section headings, titles, and descriptive phrases.
+3. Do NOT translate: specific named entities (person names, place names, brand names, product names), URLs, citation markers like [1], code snippets, numbers, formulas, or units.
+4. Generic descriptive phrases and section titles MUST be translated even if they sound technical.
 5. A line ending with a hyphen (-) is a word broken across lines — translate just that fragment, keep the hyphen.
 6. Do NOT add explanations, markdown, notes, or commentary of any kind.`;
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -29,9 +31,10 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = session.user.id;
-  const { lines, contextSummary = "" } = (await req.json()) as {
+  const { lines, contextSummary = "", targetLanguage = "Mongolian" } = (await req.json()) as {
     lines: string[];
     contextSummary?: string;
+    targetLanguage?: string;
   };
 
   if (!lines?.length) {
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
   const response = await openai.chat.completions.create({
     model: TRANSLATION_MODEL,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: buildSystemPrompt(targetLanguage) },
       { role: "user", content: input + contextPart },
     ],
     temperature: 0.1,
