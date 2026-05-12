@@ -12,11 +12,6 @@ export default function HomePage() {
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-cosmos-purple-bright/10 blur-3xl pointer-events-none" />
         <div className="absolute top-1/3 left-1/4 w-64 h-64 rounded-full bg-cosmos-blue-bright/8 blur-3xl pointer-events-none" />
 
-        {/* Badge */}
-        <div className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cosmos-purple-bright/30 bg-cosmos-purple-bright/10 text-sm text-cosmos-purple-light">
-          <Zap size={13} className="text-cosmos-purple-bright" />
-          Powered by GPT‑5.4 mini
-        </div>
 
         {/* Heading */}
         <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-cosmos-star mb-6 leading-tight max-w-4xl">
