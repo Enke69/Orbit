@@ -128,10 +128,10 @@ export const t = {
 
   mn: {
     nav: {
-      documents: "Баримт",
-      text: "Текст",
-      history: "Түүх",
-      dashboard: "Самбар",
+      documents: "Documents",
+      text: "Text",
+      history: "History",
+      dashboard: "Dashboard",
       signIn: "Нэвтрэх",
       getStarted: "Эхлэх",
       signOut: "Гарах",
@@ -143,12 +143,12 @@ export const t = {
       terms: "Нөхцөл",
     },
     home: {
-      heroHeading: "ухаалгаар",
+      heroHeading: "Ухаалгаар",
       heroHighlight: "орчуул",
       heroSub: "PDF эсвэл Word оруулаад орчуулга авна уу. Зураг, хүснэгт, бүтэц хэвээрээ үлдэнэ.",
       cta: "Орчуулах",
       ctaDoc: "Баримт орчуулах",
-      freeNote: "Сард 15,000 тэмдэгт үнэгүй. Карт шаардахгүй.",
+      freeNote: "Сард 15,000 тэмдэгт үнэгүй.",
       featuresHeading: "Мэргэжлийн орчуулга",
       pricingHeading: "Үнэ тариф",
       pricingSub: "Үнэгүй эхэл. Хэрэгтэй үедээ нэм.",
