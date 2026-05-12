@@ -16,8 +16,8 @@ export const t = {
       terms: "Terms of Service",
     },
     home: {
-      heroHeading: "Translate any document",
-      heroHighlight: "instantly",
+      heroHeading: "Translate",
+      heroHighlight: "smarter",
       heroSub: "Upload a PDF or Word document. Orbit translates the text while keeping your images, tables, and layout exactly where they were. Download the result instantly.",
       cta: "Start translating",
       ctaDoc: "Translate a document",
@@ -143,8 +143,8 @@ export const t = {
       terms: "Үйлчилгээний нөхцөл",
     },
     home: {
-      heroHeading: "Баримт бичгээ орчуулаарай",
-      heroHighlight: "даруй",
+      heroHeading: "Илүү ухаалгаар",
+      heroHighlight: "орчуулаарай",
       heroSub: "PDF эсвэл Word файлаа оруулаад Orbit текстийг орчуулж, зураг, хүснэгт, бүтцийг нь яг хэвээр нь хадгалж, татаж авах боломж олгоно.",
       cta: "Орчуулж эхлэх",
       ctaDoc: "Баримт бичиг орчуулах",
