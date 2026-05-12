@@ -1,6 +1,5 @@
 export const t = {
   en: {
-    // Navbar
     nav: {
       documents: "Documents",
       text: "Text",
@@ -10,16 +9,12 @@ export const t = {
       getStarted: "Get started",
       signOut: "Sign out",
     },
-
-    // Footer
     footer: {
       tagline: "Fast, accurate document translation powered by AI.",
       copyright: "All rights reserved.",
       privacy: "Privacy Policy",
       terms: "Terms of Service",
     },
-
-    // Home page
     home: {
       heroHeading: "Translate any document",
       heroHighlight: "instantly",
@@ -52,8 +47,6 @@ export const t = {
         },
       ],
     },
-
-    // History page
     history: {
       title: "Translation history",
       newTranslation: "New translation",
@@ -70,10 +63,70 @@ export const t = {
       download: "Download",
       retry: "Retry",
     },
+    dashboard: {
+      welcomeBack: "Welcome back",
+      subtitle: "Your translation dashboard",
+      newTranslation: "New translation",
+      monthlyUsage: "Monthly usage",
+      remaining: "remaining",
+      free: "free",
+      paidCredits: "paid credits",
+      topUp: "Top up",
+      totalJobs: "Total jobs",
+      thisSession: "this session",
+      recentTranslations: "Recent translations",
+      viewAll: "View all →",
+      noTranslations: "No translations yet.",
+      uploadFirst: "Upload your first document",
+      chars: "chars",
+      download: "Download",
+    },
+    text: {
+      title: "Text translation",
+      subtitle: "Paste or type any text and get an instant translation.",
+      translateTo: "Translate to",
+      source: "Source",
+      translation: "Translation",
+      cleanUp: "Clean up",
+      scanning: "Scanning…",
+      translate: "Translate",
+      copy: "Copy",
+      copied: "Copied",
+      translating: "Translating…",
+      placeholder: "Type or paste text here…",
+      outputPlaceholder: "Translation will appear here",
+      usageNote: "Uses characters from your monthly allowance.",
+      tooLong: (max: number) => `Text too long. Max ${max.toLocaleString()} characters.`,
+      limitReached: "Character limit reached. Please top up your credits.",
+      networkError: "Network error. Please try again.",
+    },
+    translate: {
+      title: "Translate a document",
+      subtitle: "Upload a PDF or Word file and get it translated. Download the result instantly.",
+      step1: "1. Upload document",
+      step2: "2. Target language",
+      step3: "3. Output format",
+      wordDoc: "Word document",
+      pdfFile: "PDF file",
+      scanning: "Scanning document…",
+      translate: "Translate",
+      usageNote: "This uses characters from your monthly allowance.",
+      doneTitle: "Translation complete!",
+      doneSub: "Your document has been translated.",
+      downloadBtn: "Download translated document",
+      translateAnother: "Translate another document",
+      limitReached: "Character limit reached. Please top up your credits.",
+      networkError: "Network error. Please try again.",
+    },
+    status: {
+      PENDING: "Pending",
+      PROCESSING: "Translating...",
+      DONE: "Done",
+      FAILED: "Failed",
+    },
   },
 
   mn: {
-    // Navbar
     nav: {
       documents: "Баримт бичиг",
       text: "Текст",
@@ -83,16 +136,12 @@ export const t = {
       getStarted: "Эхлэх",
       signOut: "Гарах",
     },
-
-    // Footer
     footer: {
       tagline: "Хиймэл оюун ухаан ашиглан баримт бичгийг хурдан, үнэн зөв орчуулна.",
       copyright: "Бүх эрх хуулиар хамгаалагдсан.",
       privacy: "Нууцлалын бодлого",
       terms: "Үйлчилгээний нөхцөл",
     },
-
-    // Home page
     home: {
       heroHeading: "Баримт бичгээ орчуулаарай",
       heroHighlight: "даруй",
@@ -125,8 +174,6 @@ export const t = {
         },
       ],
     },
-
-    // History page
     history: {
       title: "Орчуулгын түүх",
       newTranslation: "Шинэ орчуулга",
@@ -142,6 +189,67 @@ export const t = {
       chars: "тэмдэгт",
       download: "Татах",
       retry: "Дахин оролдох",
+    },
+    dashboard: {
+      welcomeBack: "Тавтай морилно уу",
+      subtitle: "Орчуулгын хянах самбар",
+      newTranslation: "Шинэ орчуулга",
+      monthlyUsage: "Сарын хэрэглээ",
+      remaining: "үлдсэн",
+      free: "үнэгүй",
+      paidCredits: "худалдаж авсан",
+      topUp: "Нэмэх",
+      totalJobs: "Нийт ажил",
+      thisSession: "энэ сессид",
+      recentTranslations: "Сүүлийн орчуулгууд",
+      viewAll: "Бүгдийг харах →",
+      noTranslations: "Одоогоор орчуулга байхгүй.",
+      uploadFirst: "Анхны баримтаа оруулах",
+      chars: "тэмдэгт",
+      download: "Татах",
+    },
+    text: {
+      title: "Текст орчуулга",
+      subtitle: "Текстээ буулгаж эсвэл бичээд орчуулга авна уу.",
+      translateTo: "Орчуулах хэл",
+      source: "Эх бичвэр",
+      translation: "Орчуулга",
+      cleanUp: "Цэвэрлэх",
+      scanning: "Уншиж байна…",
+      translate: "Орчуулах",
+      copy: "Хуулах",
+      copied: "Хуулагдлаа",
+      translating: "Орчуулж байна…",
+      placeholder: "Текстээ энд бичнэ үү…",
+      outputPlaceholder: "Орчуулга энд харагдана",
+      usageNote: "Сарын хэрэглээнээс тэмдэгт зарцуулна.",
+      tooLong: (max: number) => `Текст хэт урт байна. Хамгийн ихдээ ${max.toLocaleString()} тэмдэгт.`,
+      limitReached: "Тэмдэгтийн хязгаарт хүрлээ. Кредит нэмнэ үү.",
+      networkError: "Сүлжээний алдаа. Дахин оролдоно уу.",
+    },
+    translate: {
+      title: "Баримт бичиг орчуулах",
+      subtitle: "PDF эсвэл Word файл оруулаад орчуулга авна уу. Даруй татаж авна уу.",
+      step1: "1. Файл оруулах",
+      step2: "2. Орчуулах хэл",
+      step3: "3. Гаралтын формат",
+      wordDoc: "Word баримт",
+      pdfFile: "PDF файл",
+      scanning: "Баримт уншиж байна…",
+      translate: "Орчуулах",
+      usageNote: "Сарын хэрэглээнээс тэмдэгт зарцуулна.",
+      doneTitle: "Орчуулга дууслаа!",
+      doneSub: "Баримт орчуулагдлаа.",
+      downloadBtn: "Орчуулсан баримтыг татах",
+      translateAnother: "Өөр баримт орчуулах",
+      limitReached: "Тэмдэгтийн хязгаарт хүрлээ. Кредит нэмнэ үү.",
+      networkError: "Сүлжээний алдаа. Дахин оролдоно уу.",
+    },
+    status: {
+      PENDING: "Хүлээгдэж байна",
+      PROCESSING: "Орчуулж байна...",
+      DONE: "Дууслаа",
+      FAILED: "Алдаа гарлаа",
     },
   },
 } as const;

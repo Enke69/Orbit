@@ -7,6 +7,8 @@ import { ArrowRight, Copy, Check, X, Wand2, Globe } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { LANGUAGES, DEFAULT_LANGUAGE, getLanguageName } from "@/lib/languages";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 const MAX_CHARS = 5000;
 
@@ -21,6 +23,8 @@ function cleanupText(text: string): string {
 }
 
 export default function TextTranslatePage() {
+  const { lang } = useLanguage();
+  const tr = t[lang].text;
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +39,7 @@ export default function TextTranslatePage() {
     const text = input.trim();
     if (!text) return;
     if (text.length > MAX_CHARS) {
-      toast.error(`Text too long. Max ${MAX_CHARS.toLocaleString()} characters.`);
+      toast.error(tr.tooLong(MAX_CHARS));
       return;
     }
 
@@ -99,7 +103,7 @@ export default function TextTranslatePage() {
         const data = await res.json().catch(() => ({}));
         toast.error(
           res.status === 402
-            ? "Character limit reached. Please top up your credits."
+            ? tr.limitReached
             : (data.error ?? "Translation failed")
         );
         return;
@@ -125,7 +129,7 @@ export default function TextTranslatePage() {
       setOutput(result);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
-      toast.error("Network error. Please try again.");
+      toast.error(tr.networkError);
     } finally {
       setLoading(false);
     }
@@ -166,15 +170,15 @@ export default function TextTranslatePage() {
 
       <div className="max-w-6xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
-          <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">Text translation</h1>
-          <p className="text-cosmos-dust">Paste or type any text and get an instant translation.</p>
+          <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">{tr.title}</h1>
+          <p className="text-cosmos-dust">{tr.subtitle}</p>
         </div>
 
         {/* Language selector */}
         <div className="flex justify-center mb-6">
           <div className="flex items-center gap-3 glass-card rounded-2xl px-4 py-3">
             <Globe size={15} className="text-cosmos-dust/50 flex-shrink-0" />
-            <span className="text-sm text-cosmos-dust/60">Translate to</span>
+            <span className="text-sm text-cosmos-dust/60">{tr.translateTo}</span>
             <select
               value={targetLanguage}
               onChange={(e) => setTargetLanguage(e.target.value)}
@@ -194,7 +198,7 @@ export default function TextTranslatePage() {
           {/* Input */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs font-medium text-cosmos-dust/60 uppercase tracking-wider">Source</span>
+              <span className="text-xs font-medium text-cosmos-dust/60 uppercase tracking-wider">{tr.source}</span>
               <div className="flex items-center gap-3">
                 <span className={cn("text-xs", overLimit ? "text-red-400" : "text-cosmos-dust/50")}>
                   {charCount.toLocaleString()} / {MAX_CHARS.toLocaleString()}
@@ -206,7 +210,7 @@ export default function TextTranslatePage() {
                       title="Remove unnecessary line breaks"
                       className="flex items-center gap-1 text-xs text-cosmos-dust/50 hover:text-cosmos-purple-light transition-colors"
                     >
-                      <Wand2 size={12} /> Clean up
+                      <Wand2 size={12} /> {tr.cleanUp}
                     </button>
                     <button onClick={handleClear} className="text-cosmos-dust/40 hover:text-cosmos-dust transition-colors">
                       <X size={14} />
@@ -218,7 +222,7 @@ export default function TextTranslatePage() {
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Type or paste text here…"
+              placeholder={tr.placeholder}
               className={cn(
                 "flex-1 min-h-[400px] w-full rounded-2xl p-5 text-sm text-cosmos-star placeholder:text-cosmos-dust/30",
                 "bg-white/[0.03] border border-cosmos-purple-bright/20 focus:border-cosmos-purple-bright/50",
@@ -231,14 +235,14 @@ export default function TextTranslatePage() {
           {/* Output */}
           <div className="flex flex-col">
             <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs font-medium text-cosmos-dust/60 uppercase tracking-wider">Translation</span>
+              <span className="text-xs font-medium text-cosmos-dust/60 uppercase tracking-wider">{tr.translation}</span>
               {output && (
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1.5 text-xs text-cosmos-dust/60 hover:text-cosmos-star transition-colors"
                 >
                   {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                  {copied ? "Copied" : "Copy"}
+                  {copied ? tr.copied : tr.copy}
                 </button>
               )}
             </div>
@@ -251,11 +255,11 @@ export default function TextTranslatePage() {
               )}
             >
               {loading ? (
-                <span className="text-cosmos-dust/40">Translating…</span>
+                <span className="text-cosmos-dust/40">{tr.translating}</span>
               ) : output ? (
                 <pre className="whitespace-pre-wrap font-sans">{output}</pre>
               ) : (
-                <span>Translation will appear here</span>
+                <span>{tr.outputPlaceholder}</span>
               )}
             </div>
           </div>
@@ -269,11 +273,11 @@ export default function TextTranslatePage() {
             size="lg"
             className="gap-2 min-w-[200px]"
           >
-            {scanning ? "Scanning…" : "Translate"} <ArrowRight size={16} />
+            {scanning ? tr.scanning : tr.translate} <ArrowRight size={16} />
           </Button>
         </div>
 
-        <p className="text-center text-xs text-cosmos-dust/40 mt-4">Uses characters from your monthly allowance.</p>
+        <p className="text-center text-xs text-cosmos-dust/40 mt-4">{tr.usageNote}</p>
       </div>
     </>
   );

@@ -11,6 +11,8 @@ import { toast } from "react-hot-toast";
 import { ArrowRight, FileOutput, Download, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LANGUAGES, DEFAULT_LANGUAGE, getLanguageName } from "@/lib/languages";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 const PdfTranslatorClient = dynamic(
   () => import("@/components/sections/PdfTranslatorClient").then((m) => m.PdfTranslatorClient),
@@ -82,6 +84,8 @@ async function scanPdfText(file: File): Promise<string> {
 }
 
 export default function TranslatePage() {
+  const { lang } = useLanguage();
+  const tr = t[lang].translate;
   const [file, setFile] = useState<File | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("pdf");
   const [targetLanguage, setTargetLanguage] = useState(DEFAULT_LANGUAGE);
@@ -154,7 +158,7 @@ export default function TranslatePage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(res.status === 402 ? "Character limit reached. Please top up your credits." : (data.error ?? "Failed to start translation"));
+        toast.error(res.status === 402 ? tr.limitReached : (data.error ?? "Failed to start translation"));
         setLoading(false);
         return;
       }
@@ -163,7 +167,7 @@ export default function TranslatePage() {
       setTotalChunks(data.totalChunks ?? 1);
       setStage("translating");
     } catch {
-      toast.error("Network error. Please try again.");
+      toast.error(tr.networkError);
       setLoading(false);
     }
   }
@@ -202,21 +206,21 @@ export default function TranslatePage() {
 
       <div className="max-w-2xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
-          <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">Translate a document</h1>
-          <p className="text-cosmos-dust">Upload a PDF or Word file and get it translated. Download the result instantly.</p>
+          <h1 className="font-display text-4xl font-bold text-cosmos-star mb-3">{tr.title}</h1>
+          <p className="text-cosmos-dust">{tr.subtitle}</p>
         </div>
 
         {stage === "upload" && (
           <div className="space-y-6">
             <Card>
-              <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">1. Upload document</h2>
+              <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">{tr.step1}</h2>
               <FileUploader onFileSelect={setFile} disabled={loading || scanning} />
             </Card>
 
             {/* Target language */}
             <Card>
               <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">
-                2. Target language
+                {tr.step2}
               </h2>
               <div className="relative">
                 <Globe size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-cosmos-dust/50 pointer-events-none" />
@@ -237,7 +241,7 @@ export default function TranslatePage() {
             {/* Output format — only for non-PDF */}
             {file && !isPdf(file) && (
               <Card>
-                <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">3. Output format</h2>
+                <h2 className="font-semibold text-cosmos-star mb-4 text-sm uppercase tracking-wider opacity-60">{tr.step3}</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {(["pdf", "docx"] as OutputFormat[]).map((fmt) => (
                     <button
@@ -253,7 +257,7 @@ export default function TranslatePage() {
                       <FileOutput size={18} className={outputFormat === fmt ? "text-cosmos-purple-light" : "text-cosmos-dust"} />
                       <div>
                         <p className={cn("font-medium text-sm", outputFormat === fmt ? "text-cosmos-star" : "text-cosmos-dust")}>.{fmt.toUpperCase()}</p>
-                        <p className="text-xs text-cosmos-dust/60 mt-0.5">{fmt === "docx" ? "Word document" : "PDF file"}</p>
+                        <p className="text-xs text-cosmos-dust/60 mt-0.5">{fmt === "docx" ? tr.wordDoc : tr.pdfFile}</p>
                       </div>
                     </button>
                   ))}
@@ -268,9 +272,9 @@ export default function TranslatePage() {
               size="lg"
               className="w-full gap-2"
             >
-              {scanning ? "Scanning document…" : "Translate"} <ArrowRight size={16} />
+              {scanning ? tr.scanning : tr.translate} <ArrowRight size={16} />
             </Button>
-            <p className="text-center text-xs text-cosmos-dust/50">This uses characters from your monthly allowance.</p>
+            <p className="text-center text-xs text-cosmos-dust/50">{tr.usageNote}</p>
           </div>
         )}
 
@@ -299,15 +303,15 @@ export default function TranslatePage() {
               <Download size={28} className="text-emerald-400" />
             </div>
             <div>
-              <p className="font-display font-semibold text-lg text-cosmos-star">Translation complete!</p>
-              <p className="text-sm text-cosmos-dust mt-1">Your document has been translated.</p>
+              <p className="font-display font-semibold text-lg text-cosmos-star">{tr.doneTitle}</p>
+              <p className="text-sm text-cosmos-dust mt-1">{tr.doneSub}</p>
             </div>
             {downloadUrl && (
               <a href={downloadUrl} download={file ? file.name.replace(/\.[^.]+$/, "") + "_translated.pdf" : "translated.pdf"}>
-                <Button size="lg" className="gap-2 w-full"><Download size={16} /> Download translated document</Button>
+                <Button size="lg" className="gap-2 w-full"><Download size={16} /> {tr.downloadBtn}</Button>
               </a>
             )}
-            <Button variant="outline" onClick={reset} className="w-full">Translate another document</Button>
+            <Button variant="outline" onClick={reset} className="w-full">{tr.translateAnother}</Button>
           </div>
         )}
       </div>
