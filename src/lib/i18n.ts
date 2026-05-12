@@ -21,7 +21,7 @@ export const t = {
       heroSub: "Upload a PDF or Word document. Orbit translates the text while keeping your images, tables, and layout exactly where they were. Download the result instantly.",
       cta: "Start translating",
       ctaDoc: "Translate a document",
-      freeNote: "15,000 characters free every month. No credit card required.",
+      freeNote: "15,000 characters free every month.",
       featuresHeading: "Everything you need for professional translation",
       pricingHeading: "Simple pricing",
       pricingSub: "Start free. Top up only when you need more.",
