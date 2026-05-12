@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { SessionProvider } from "next-auth/react";
 import { StarBackground } from "@/components/ui/StarBackground";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 export const metadata: Metadata = {
   icons: { icon: "/images/orbit-logo.png" },
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="mn" suppressHydrationWarning>
       <body className="antialiased">
         <SessionProvider>
+          <LanguageProvider>
           <StarBackground />
           <div className="relative z-10 min-h-screen">
             {children}
@@ -47,6 +49,7 @@ export default function RootLayout({
               },
             }}
           />
+          </LanguageProvider>
         </SessionProvider>
       </body>
     </html>

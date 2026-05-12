@@ -8,20 +8,23 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { Layers, History, LogOut, User, ChevronDown, Zap, Type } from "lucide-react";
-
-const NAV_LINKS = [
-  { href: "/translate", icon: Layers,  label: "Documents" },
-  { href: "/text",      icon: Type,    label: "Text"      },
-  { href: "/history",   icon: History, label: "History"   },
-];
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 export function Navbar() {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const { lang, toggle } = useLanguage();
+  const tr = t[lang];
 
-  // Close user dropdown when clicking outside
+  const NAV_LINKS = [
+    { href: "/translate", icon: Layers,  label: tr.nav.documents },
+    { href: "/text",      icon: Type,    label: tr.nav.text      },
+    { href: "/history",   icon: History, label: tr.nav.history   },
+  ];
+
   useEffect(() => {
     if (!menuOpen) return;
     function handleClick(e: MouseEvent) {
@@ -77,8 +80,19 @@ export function Navbar() {
               </div>
             )}
 
-            {/* Right side — user menu */}
-            <div className="flex items-center gap-3">
+            {/* Right side */}
+            <div className="flex items-center gap-2">
+
+              {/* Language toggle */}
+              <button
+                onClick={toggle}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-cosmos-purple-bright/20 text-cosmos-dust hover:text-cosmos-star hover:border-cosmos-purple-bright/40 hover:bg-white/5 active:scale-95 transition-all duration-150"
+                title={lang === "en" ? "Switch to Mongolian" : "Switch to English"}
+              >
+                <span className="text-base leading-none">{lang === "en" ? "🇲🇳" : "🇬🇧"}</span>
+                <span className="hidden sm:inline">{lang === "en" ? "MN" : "EN"}</span>
+              </button>
+
               {session ? (
                 <div className="relative" ref={menuRef}>
                   <button
@@ -112,13 +126,13 @@ export function Navbar() {
                         className="flex items-center gap-2 px-3 py-2 text-sm text-cosmos-dust hover:text-cosmos-star hover:bg-white/5 transition-colors"
                         onClick={() => setMenuOpen(false)}
                       >
-                        <Zap size={14} /> Dashboard
+                        <Zap size={14} /> {tr.nav.dashboard}
                       </Link>
                       <button
                         onClick={() => { signOut({ callbackUrl: "/" }); setMenuOpen(false); }}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                       >
-                        <LogOut size={14} /> Sign out
+                        <LogOut size={14} /> {tr.nav.signOut}
                       </button>
                     </div>
                   )}
@@ -126,10 +140,10 @@ export function Navbar() {
               ) : (
                 <>
                   <Link href="/signin">
-                    <Button variant="ghost" size="sm">Sign in</Button>
+                    <Button variant="ghost" size="sm">{tr.nav.signIn}</Button>
                   </Link>
                   <Link href="/signin">
-                    <Button size="sm">Get started</Button>
+                    <Button size="sm">{tr.nav.getStarted}</Button>
                   </Link>
                 </>
               )}
@@ -138,7 +152,7 @@ export function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile bottom nav — only shown when signed in */}
+      {/* Mobile bottom nav */}
       {session && (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-cosmos-purple-bright/10 bg-cosmos-black/80 backdrop-blur-xl">
           <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">

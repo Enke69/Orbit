@@ -1,7 +1,13 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 export function Footer() {
+  const { lang } = useLanguage();
+  const tr = t[lang];
   const year = new Date().getFullYear();
 
   return (
@@ -23,17 +29,17 @@ export function Footer() {
             </span>
           </div>
           <p className="text-sm text-cosmos-dust/70 max-w-xs">
-            Хиймэл оюун ухаан ашиглан баримт бичгийг хурдан, үнэн зөв орчуулна.
+            {tr.footer.tagline}
           </p>
         </div>
 
         {/* Nav links */}
         <div className="flex items-center justify-center gap-6 mb-8 flex-wrap">
           {[
-            { href: "/translate", label: "Documents" },
-            { href: "/text",      label: "Text"      },
-            { href: "/history",   label: "History"   },
-            { href: "/dashboard", label: "Dashboard" },
+            { href: "/translate", label: tr.nav.documents },
+            { href: "/text",      label: tr.nav.text      },
+            { href: "/history",   label: tr.nav.history   },
+            { href: "/dashboard", label: tr.nav.dashboard },
           ].map(({ href, label }) => (
             <Link
               key={href}
@@ -50,13 +56,13 @@ export function Footer() {
 
         {/* Legal */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-cosmos-dust/40">
-          <p>© {year} Orbit. Бүх эрх хуулиар хамгаалагдсан.</p>
+          <p>© {year} Orbit. {tr.footer.copyright}</p>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-cosmos-dust/70 transition-colors">
-              Нууцлалын бодлого
+              {tr.footer.privacy}
             </Link>
             <Link href="/terms" className="hover:text-cosmos-dust/70 transition-colors">
-              Үйлчилгээний нөхцөл
+              {tr.footer.terms}
             </Link>
           </div>
         </div>
