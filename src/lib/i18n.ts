@@ -34,6 +34,10 @@ export const t = {
       ],
       plans: [
         {
+          name: "Free", price: "₮0", period: "/ month", featured: false, cta: "Get started",
+          features: ["1 translation every 24 hours", "PDF & Word upload", "All source languages"],
+        },
+        {
           name: "Monthly", price: "₮25,000", period: "/ month", featured: true, cta: "Get started",
           features: ["75 translations / month", "3 translations / day", "PDF & Word upload", "Translation history"],
         },
@@ -152,6 +156,10 @@ export const t = {
         { title: "Контекст мэдрэмжтэй",   description: "AI бүх баримтын туршид нэр томьёог тогтмол санаж байдаг." },
       ],
       plans: [
+        {
+          name: "Үнэгүй", price: "₮0", period: "/ сар", featured: false, cta: "Эхлэх",
+          features: ["24 цагт 1 орчуулга", "PDF, Word оруулах", "Бүх хэл"],
+        },
         {
           name: "Сарын", price: "₮25,000", period: "/ сар", featured: true, cta: "Эхлэх",
           features: ["Сард 75 орчуулга", "Өдөрт 3 орчуулга", "PDF, Word оруулах", "Орчуулгын түүх"],
