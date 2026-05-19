@@ -462,7 +462,7 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
     const res = await fetch("/api/translate/text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lines, contextSummary, targetLanguage, translateTerms }),
+      body: JSON.stringify({ lines, contextSummary, targetLanguage, translateTerms, internal: true }),
     });
     if (res.status === 402) throw new Error("Character limit reached. Please top up your credits.");
     if (!res.ok) {

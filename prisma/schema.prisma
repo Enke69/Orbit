@@ -23,6 +23,7 @@ model User {
   sessions      Session[]
   translations  Translation[]
   monthlyUsage  MonthlyUsage[]
+  textUsage     TextUsage[]
   creditPurchases CreditPurchase[]
 }
 
@@ -102,6 +103,13 @@ model MonthlyUsage {
   updatedAt   DateTime @updatedAt
 
   @@unique([userId, month])
+}
+
+model TextUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
 
 model CreditPurchase {

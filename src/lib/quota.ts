@@ -8,6 +8,12 @@ export const PLAN_LIMITS: Record<Plan, { daily: number; monthly: number | null }
   VIP:     { daily: 100, monthly: null },
 };
 
+export const TEXT_LIMITS: Record<Plan, { daily: number; maxChars: number | null }> = {
+  FREE:    { daily: 3,   maxChars: 15_000 },
+  MONTHLY: { daily: 10,  maxChars: 20_000 },
+  VIP:     { daily: 100, maxChars: null   },
+};
+
 export const PLAN_LABELS: Record<Plan, { en: string; mn: string }> = {
   FREE:    { en: "Free",    mn: "Үнэгүй" },
   MONTHLY: { en: "Monthly", mn: "Сарын"  },
@@ -84,4 +90,44 @@ export async function checkTranslationQuota(userId: string): Promise<{
   }
 
   return { allowed: true, plan, isAdmin: false, dailyCount, monthlyCount };
+}
+
+export async function checkTextQuota(userId: string, charCount: number): Promise<{
+  allowed: boolean;
+  plan: Plan;
+  isAdmin: boolean;
+  error?: string;
+}> {
+  const { plan, isAdmin } = await getEffectivePlan(userId);
+
+  if (isAdmin) return { allowed: true, plan, isAdmin: true };
+
+  const limits = TEXT_LIMITS[plan];
+
+  if (limits.maxChars !== null && charCount > limits.maxChars) {
+    return {
+      allowed: false,
+      plan,
+      isAdmin: false,
+      error: `Text too long. Your plan allows up to ${limits.maxChars.toLocaleString()} characters per translation.`,
+    };
+  }
+
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const dailyCount = await prisma.textUsage.count({ where: { userId, createdAt: { gte: since24h } } });
+
+  if (dailyCount >= limits.daily) {
+    return {
+      allowed: false,
+      plan,
+      isAdmin: false,
+      error: `Daily text translation limit reached (${limits.daily}/day). Try again tomorrow.`,
+    };
+  }
+
+  return { allowed: true, plan, isAdmin: false };
+}
+
+export async function recordTextUsage(userId: string): Promise<void> {
+  await prisma.textUsage.create({ data: { userId } });
 }

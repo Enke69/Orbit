@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getCurrentMonth } from "@/lib/utils";
-import { FREE_CHARS_PER_MONTH, TRANSLATION_MODEL, getOpenAI } from "@/lib/openai";
+import { TRANSLATION_MODEL, getOpenAI } from "@/lib/openai";
+import { checkTextQuota, recordTextUsage } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -35,30 +34,25 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = session.user.id;
-  const { lines, contextSummary = "", targetLanguage = "Mongolian", translateTerms } = (await req.json()) as {
+  const { lines, contextSummary = "", targetLanguage = "Mongolian", translateTerms, internal } = (await req.json()) as {
     lines: string[];
     contextSummary?: string;
     targetLanguage?: string;
     translateTerms?: string[];
+    internal?: boolean;
   };
 
   if (!lines?.length) {
     return NextResponse.json({ translated: [], newContext: contextSummary });
   }
 
-  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
-  const isAdmin = adminEmails.includes(session.user.email ?? "");
-
   const totalChars = lines.reduce((s, l) => s + l.length, 0);
 
-  if (!isAdmin) {
-    const month = getCurrentMonth();
-    const usage = await prisma.monthlyUsage.findUnique({ where: { userId_month: { userId, month } } });
-    const charsUsed = usage?.charsUsed ?? 0;
-    const charsPaid = usage?.charsPaid ?? 0;
-    const remaining = FREE_CHARS_PER_MONTH + charsPaid - charsUsed;
-    if (totalChars > remaining) {
-      return NextResponse.json({ error: "Character limit exceeded", remaining }, { status: 402 });
+  // Internal calls (PDF pipeline) bypass text quota — they're already gated by document quota
+  if (!internal) {
+    const quota = await checkTextQuota(userId, totalChars);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: quota.error ?? "Text translation limit reached" }, { status: 402 });
     }
   }
 
@@ -97,13 +91,9 @@ export async function POST(req: NextRequest) {
     .join(" ")
     .slice(-500);
 
-  if (!isAdmin) {
-    const month = getCurrentMonth();
-    await prisma.monthlyUsage.upsert({
-      where: { userId_month: { userId, month } },
-      update: { charsUsed: { increment: totalChars } },
-      create: { userId, month, charsUsed: totalChars },
-    });
+  // Record usage for non-internal calls only
+  if (!internal) {
+    await recordTextUsage(userId);
   }
 
   return NextResponse.json({ translated, newContext });
