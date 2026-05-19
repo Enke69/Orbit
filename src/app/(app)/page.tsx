@@ -96,7 +96,13 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signin">
+              <Link href={
+                plan.name === "Free" || plan.name === "Үнэгүй"
+                  ? "/dashboard"
+                  : plan.name === "VIP"
+                  ? "/subscribe/vip"
+                  : "/subscribe/monthly"
+              }>
                 <Button variant={plan.featured ? "cosmic" : "outline"} className="w-full">
                   {plan.cta}
                 </Button>
