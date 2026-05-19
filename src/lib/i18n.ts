@@ -34,16 +34,8 @@ export const t = {
       ],
       plans: [
         {
-          name: "Free", price: "₮0", period: "/ month", featured: false, cta: "Get started",
-          features: ["15,000 characters / month", "PDF & Word upload", "Download as DOCX or PDF", "All source languages"],
-        },
-        {
-          name: "Pro", price: "₮25,000", period: "/ month", featured: true, cta: "Go Pro",
-          features: ["500,000 characters / month", "Priority translation queue", "Translation history (30 days)", "Email support"],
-        },
-        {
-          name: "Top-up", price: "₮500", period: "per 1,000 chars", featured: false, cta: "Pay as you go",
-          features: ["Buy only what you need", "Credits never expire", "Same quality as Pro", "QPay supported"],
+          name: "Monthly", price: "₮25,000", period: "/ month", featured: true, cta: "Get started",
+          features: ["75 translations / month", "3 translations / day", "PDF & Word upload", "Translation history"],
         },
       ],
     },
@@ -161,16 +153,8 @@ export const t = {
       ],
       plans: [
         {
-          name: "Үнэгүй", price: "₮0", period: "/ сар", featured: false, cta: "Эхлэх",
-          features: ["Сард 15,000 тэмдэгт", "PDF, Word оруулах", "DOCX эсвэл PDF татах", "Бүх хэл"],
-        },
-        {
-          name: "Pro", price: "₮25,000", period: "/ сар", featured: true, cta: "Pro авах",
-          features: ["Сард 500,000 тэмдэгт", "Тэргүүлэх дараалал", "Түүх (30 хоног)", "И-мэйл дэмжлэг"],
-        },
-        {
-          name: "Нэмэлт", price: "₮500", period: "1,000 тэмдэгтэд", featured: false, cta: "Хэрэгцээгээрээ",
-          features: ["Хэрэгтэй хэмжээгээрээ ав", "Кредит хугацаагүй", "Pro-тай ижил чанар", "QPay дэмжинэ"],
+          name: "Сарын", price: "₮25,000", period: "/ сар", featured: true, cta: "Эхлэх",
+          features: ["Сард 75 орчуулга", "Өдөрт 3 орчуулга", "PDF, Word оруулах", "Орчуулгын түүх"],
         },
       ],
     },
