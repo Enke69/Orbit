@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
-import { isAllowedFileType, getCurrentMonth } from "@/lib/utils";
-import { FREE_CHARS_PER_MONTH } from "@/lib/openai";
+import { isAllowedFileType } from "@/lib/utils";
 import { extractDocx } from "@/lib/docx-processor";
 import { extractPdf } from "@/lib/pdf-processor";
 import { chunkTranslatableText, detectLanguage } from "@/lib/translator";
+import { checkTranslationQuota } from "@/lib/quota";
 import { addDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -49,21 +49,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Could not read file. Make sure it is a valid PDF or Word document." }, { status: 422 });
   }
 
-  // Check if user is admin (infinite credits)
-  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
-  const isAdmin = adminEmails.includes(session.user.email ?? "");
-
-  // Check quota (skipped for admins)
-  const month = getCurrentMonth();
-  if (!isAdmin) {
-    const usage = await prisma.monthlyUsage.findUnique({ where: { userId_month: { userId, month } } });
-    const charsUsed = usage?.charsUsed ?? 0;
-    const charsPaid = usage?.charsPaid ?? 0;
-    const remaining = FREE_CHARS_PER_MONTH + charsPaid - charsUsed;
-
-    if (extracted.charCount > remaining) {
-      return NextResponse.json({ error: "Character limit exceeded", required: extracted.charCount, remaining }, { status: 402 });
-    }
+  // Check translation quota based on plan
+  const quota = await checkTranslationQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json({ error: quota.error ?? "Translation limit reached" }, { status: 402 });
   }
 
   // Upload original file
@@ -106,15 +95,6 @@ export async function POST(req: NextRequest) {
       errorMessage: jobPath,
     },
   });
-
-  // Deduct usage (skipped for admins)
-  if (!isAdmin) {
-    await prisma.monthlyUsage.upsert({
-      where: { userId_month: { userId, month } },
-      update: { charsUsed: { increment: extracted.charCount } },
-      create: { userId, month, charsUsed: extracted.charCount },
-    });
-  }
 
   return NextResponse.json({
     translationId: translation.id,

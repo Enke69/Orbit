@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
+import { checkTranslationQuota } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,13 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = session.user.id;
+
+  // Check translation quota based on plan
+  const quota = await checkTranslationQuota(userId);
+  if (!quota.allowed) {
+    return NextResponse.json({ error: quota.error ?? "Translation limit reached" }, { status: 402 });
+  }
+
   const timestamp = Date.now();
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${userId}/${timestamp}_${safeName}_mongolian.pdf`;

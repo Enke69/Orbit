@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
-import { UsageMeter } from "@/components/ui/ProgressBar";
+import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { FileText, Plus, History, Zap, Clock, Download } from "lucide-react";
+import { FileText, Plus, History, Clock, Download, Crown, Zap, Shield } from "lucide-react";
 import { format } from "date-fns";
-import { formatCharCount } from "@/lib/utils";
-import { FREE_CHARS_PER_MONTH } from "@/lib/openai";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
+import { PLAN_LIMITS, PLAN_LABELS, type Plan } from "@/lib/quota";
 
 interface Translation {
   id: string;
@@ -23,19 +21,34 @@ interface Translation {
 
 interface Props {
   userName: string | null | undefined;
-  charsUsed: number;
-  charsPaid: number;
-  month: string;
+  plan: Plan;
+  planExpiresAt: Date | null;
+  isAdmin: boolean;
+  dailyCount: number;
+  monthlyCount: number;
   recentTranslations: Translation[];
 }
 
-export function DashboardView({ userName, charsUsed, charsPaid, month, recentTranslations }: Props) {
+const PLAN_BADGE_VARIANTS: Record<Plan, "default" | "info" | "success"> = {
+  FREE: "default",
+  MONTHLY: "info",
+  VIP: "success",
+};
+
+const PLAN_ICONS: Record<Plan, typeof Zap> = {
+  FREE: Zap,
+  MONTHLY: Crown,
+  VIP: Crown,
+};
+
+export function DashboardView({ userName, plan, planExpiresAt, isAdmin, dailyCount, monthlyCount, recentTranslations }: Props) {
   const { lang } = useLanguage();
   const tr = t[lang].dashboard;
   const trStatus = t[lang].status;
 
-  const totalAllowance = FREE_CHARS_PER_MONTH + charsPaid;
-  const remaining = Math.max(0, totalAllowance - charsUsed);
+  const limits = PLAN_LIMITS[plan];
+  const planLabel = PLAN_LABELS[plan][lang as "en" | "mn"];
+  const PlanIcon = PLAN_ICONS[plan];
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -56,38 +69,80 @@ export function DashboardView({ userName, charsUsed, charsPaid, month, recentTra
 
       {/* Stats row */}
       <div className="grid sm:grid-cols-3 gap-4 mb-8">
-        <Card className="sm:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap size={16} className="text-cosmos-purple-light" /> {tr.monthlyUsage}
-            </CardTitle>
-            <CardDescription>{month}</CardDescription>
-          </CardHeader>
-          <UsageMeter
-            used={charsUsed}
-            total={totalAllowance}
-            label={`${formatCharCount(remaining)} ${tr.remaining}`}
-          />
-          <div className="flex items-center justify-between mt-4">
-            <span className="text-xs text-cosmos-dust">
-              {formatCharCount(FREE_CHARS_PER_MONTH)} {tr.free} · {formatCharCount(charsPaid)} {tr.paidCredits}
-            </span>
-            <Link href="/translate">
-              <Button variant="outline" size="sm">{tr.topUp}</Button>
-            </Link>
-          </div>
-        </Card>
-
+        {/* Plan card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <History size={16} className="text-cosmos-purple-light" /> {tr.totalJobs}
+              <PlanIcon size={16} className="text-cosmos-purple-light" /> {tr.plan}
             </CardTitle>
           </CardHeader>
-          <p className="text-4xl font-bold font-display text-cosmos-star">
-            {recentTranslations.length}
-          </p>
-          <p className="text-xs text-cosmos-dust mt-1">{tr.thisSession}</p>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            {isAdmin ? (
+              <Badge variant="warning" className="flex items-center gap-1">
+                <Shield size={11} /> {tr.adminBadge}
+              </Badge>
+            ) : (
+              <Badge variant={PLAN_BADGE_VARIANTS[plan]}>{planLabel}</Badge>
+            )}
+          </div>
+          {planExpiresAt && !isAdmin && (
+            <p className="text-xs text-cosmos-dust/50 mt-2">
+              {tr.expires} {format(planExpiresAt, "MMM d, yyyy")}
+            </p>
+          )}
+          {plan === "FREE" && !isAdmin && (
+            <Link href="/#pricing" className="mt-3 inline-block">
+              <Button variant="outline" size="sm">{tr.topUp}</Button>
+            </Link>
+          )}
+        </Card>
+
+        {/* Today's usage */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock size={16} className="text-cosmos-purple-light" /> {tr.todayUsage}
+            </CardTitle>
+          </CardHeader>
+          {isAdmin ? (
+            <p className="text-4xl font-bold font-display text-cosmos-star">{dailyCount}</p>
+          ) : (
+            <>
+              <p className="text-4xl font-bold font-display text-cosmos-star">
+                {dailyCount}
+                <span className="text-lg text-cosmos-dust font-normal"> / {limits.daily}</span>
+              </p>
+              <p className="text-xs text-cosmos-dust mt-1">{tr.dailyLimit}</p>
+            </>
+          )}
+        </Card>
+
+        {/* Monthly usage */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History size={16} className="text-cosmos-purple-light" /> {tr.monthlyUsage}
+            </CardTitle>
+          </CardHeader>
+          {isAdmin ? (
+            <>
+              <p className="text-4xl font-bold font-display text-cosmos-star">{monthlyCount}</p>
+              <p className="text-xs text-cosmos-dust mt-1">{tr.unlimited}</p>
+            </>
+          ) : limits.monthly !== null ? (
+            <>
+              <p className="text-4xl font-bold font-display text-cosmos-star">
+                {monthlyCount}
+                <span className="text-lg text-cosmos-dust font-normal"> / {limits.monthly}</span>
+              </p>
+              <p className="text-xs text-cosmos-dust mt-1">{tr.monthlyLimit}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-4xl font-bold font-display text-cosmos-star">{monthlyCount}</p>
+              <p className="text-xs text-cosmos-dust mt-1">{tr.unlimited}</p>
+            </>
+          )}
         </Card>
       </div>
 
@@ -126,9 +181,6 @@ export function DashboardView({ userName, charsUsed, charsPaid, month, recentTra
                   </div>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                  <span className="text-xs text-cosmos-dust hidden sm:block">
-                    {item.charCount.toLocaleString()} {tr.chars}
-                  </span>
                   <Badge variant={
                     item.status === "DONE" ? "success" :
                     item.status === "PROCESSING" ? "info" :
