@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Copy, Check } from "lucide-react";
@@ -45,8 +44,8 @@ const content = {
   },
 };
 
-export default function SubscribePage({ params }: { params: Promise<{ plan: string }> }) {
-  const { plan } = use(params);
+export default function SubscribePage({ params }: { params: { plan: string } }) {
+  const { plan } = params;
   const { lang } = useLanguage();
   const [copied, setCopied] = useState(false);
 
