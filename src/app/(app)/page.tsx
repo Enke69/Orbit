@@ -71,7 +71,7 @@ export default function HomePage() {
       <section className="max-w-4xl mx-auto px-4 py-20">
         <h2 className="font-display text-3xl font-bold text-cosmos-star text-center mb-4">{tr.pricingHeading}</h2>
         <p className="text-cosmos-dust text-center mb-12">{tr.pricingSub}</p>
-        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-6">
           {tr.plans.map((plan) => (
             <Card
               key={plan.name}
