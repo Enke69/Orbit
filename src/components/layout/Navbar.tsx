@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Layers, History, LogOut, User, ChevronDown, Zap, Type } from "lucide-react";
+import { Layers, History, LogOut, User, ChevronDown, Zap, Type, Shield } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 
@@ -18,6 +18,8 @@ export function Navbar() {
   const pathname = usePathname();
   const { lang, toggle } = useLanguage();
   const tr = t[lang];
+  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
+  const isAdmin = adminEmails.includes(session?.user?.email ?? "");
 
   const NAV_LINKS = [
     { href: "/translate", icon: Layers,  label: tr.nav.documents },
@@ -128,6 +130,15 @@ export function Navbar() {
                       >
                         <Zap size={14} /> {tr.nav.dashboard}
                       </Link>
+                      {isAdmin && (
+                        <Link
+                          href="/admin"
+                          className="flex items-center gap-2 px-3 py-2 text-sm text-cosmos-purple-light hover:text-cosmos-star hover:bg-white/5 transition-colors"
+                          onClick={() => setMenuOpen(false)}
+                        >
+                          <Shield size={14} /> Admin
+                        </Link>
+                      )}
                       <button
                         onClick={() => { signOut({ callbackUrl: "/" }); setMenuOpen(false); }}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
