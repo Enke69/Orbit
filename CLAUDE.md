@@ -43,7 +43,7 @@ Two languages: English (`en`) and Mongolian (`mn`). User preference stored in `l
 - `Footer.tsx` — logo, tagline, nav links, copyright, Privacy/Terms links. Renders in selected language.
 
 ### Auth (`src/lib/auth.ts`)
-NextAuth v5 with PrismaAdapter and **database sessions**. Three providers: Google OAuth, Resend magic link, and Credentials (email/password with bcrypt). Credentials uses a lazy `await import("bcryptjs")` inside `authorize()` to avoid build-time issues.
+NextAuth v5 with PrismaAdapter and **database sessions**. Google OAuth only — `allowDangerousEmailAccountLinking: true` (safe because there's only one provider) and `authorization: { params: { prompt: "select_account" } }` to always show account picker.
 
 Middleware (`src/middleware.ts`) checks for the `authjs.session-token` cookie directly rather than calling `auth()` — avoids edge runtime conflicts with the Prisma adapter.
 
@@ -78,7 +78,7 @@ Before translation starts, the user is shown a modal (`src/components/ui/TermSel
 - 15-second countdown auto-confirms. Selected terms are passed as `translateTerms[]` through all pipelines and added as a rule override in the translation system prompt.
 
 ### Translation API (`POST /api/translate/text`)
-Accepts `{ lines: string[], contextSummary?: string, targetLanguage?: string, sourceLanguage?: string, translateTerms?: string[] }`. Uses `N|||text` format: sends numbered lines, parses `N|||translated` response. Returns null for lines where translation equals source (unchanged). Checks auth + quota, deducts chars from `MonthlyUsage`.
+Accepts `{ lines: string[], contextSummary?: string, targetLanguage?: string, sourceLanguage?: string, translateTerms?: string[] }`. Uses `N|||text` format: sends numbered lines, parses `N|||translated` response. Returns null for lines where translation equals source (unchanged). Checks auth but does **not** count against the plan translation quota (text-to-text is unbounded; only document translations are counted).
 
 ### Quality-Check API (`POST /api/translate/cleanup`)
 Accepts `{ original: string[], translated: (string|null)[], targetLanguage }`. Sends combined `N|||ORIG: ...|||CURR: ...` format to GPT. Returns corrected lines — fixes cut sentences, translates `[NOT TRANSLATED]` fragments using full page context. Falls back to original translations on error.
@@ -101,10 +101,22 @@ All files go to the `translations` Supabase Storage bucket. Paths: `{userId}/{ti
 ### Scheduled Cleanup (`vercel.json` + `src/app/api/cron/cleanup/route.ts`)
 Vercel cron fires daily at 3 AM UTC. Deletes storage files (original, translated, job JSON) then removes DB records older than 7 days. Protected by `CRON_SECRET` header check.
 
-### Quota / Credits
-- 15,000 free chars/month per user (`FREE_CHARS_PER_MONTH` in `src/lib/openai.ts`)
-- Top-ups stored in `MonthlyUsage.charsPaid`
-- QPay integration stubbed in `src/lib/payment.ts` — placeholders ready for Mongolian merchant credentials (QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE)
+### Subscription Plans & Quota (`src/lib/quota.ts`)
+Three plans stored in `User.plan` (Prisma enum: `FREE | MONTHLY | VIP`). `User.planExpiresAt` — if set and in the past, the plan is treated as FREE automatically.
+
+| Plan    | Daily limit | Monthly limit | History |
+|---------|-------------|---------------|---------|
+| FREE    | 1 / 24 h    | —             | last 3  |
+| MONTHLY | 3 / day     | 75 / month    | 7 days  |
+| VIP     | 100 / day   | —             | 30 days |
+| Admin   | unlimited   | —             | all     |
+
+`checkTranslationQuota(userId)` counts `Translation` rows created within the relevant window and returns `{ allowed, plan, error? }`. Called at the top of `POST /api/translate` (DOCX/server pipeline) and `POST /api/translate/save-pdf` (PDF/client pipeline). Admins (matched by `ADMIN_EMAILS` env var) bypass all limits. `NEXT_PUBLIC_ADMIN_EMAILS` is the same value exposed to the client for UI-only checks (Navbar admin link).
+
+Subscriptions are assigned manually via the admin panel (`/admin`) — bank transfer workflow, no automated payment processing. QPay integration is stubbed in `src/lib/payment.ts` for future use.
+
+### Admin Panel (`/admin` + `src/components/sections/AdminView.tsx`)
+Server component fetches all users; client component renders plan assignment UI. Protected by `ADMIN_EMAILS` check — redirects non-admins to `/dashboard`. `POST /api/admin/set-plan` updates `User.plan` and `User.planExpiresAt`.
 
 ### Background (`src/components/ui/StarBackground.tsx`)
 CSS `box-shadow` star field — 3 tiers (180×1px, 60×2px, 25×3px) with dual-panel seamless vertical drift. Generated in `useEffect` to avoid SSR hydration mismatch. Asteroid divs use `orbit-asteroid` keyframe. Respects `prefers-reduced-motion`.
