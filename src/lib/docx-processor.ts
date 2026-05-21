@@ -46,7 +46,54 @@ const MAMMOTH_STYLE_MAP = [
   "p[style-name='HTML Code'] => pre > code:fresh",
   "p[style-name='Code Block'] => pre > code:fresh",
   "p[style-name='Preformatted Text'] => pre > code:fresh",
+  "r[underline] => u",
 ].join("\n");
+
+// Replace inline HTML formatting tags with translator-safe markers before stripping HTML.
+// The AI is instructed to keep these markers around the translated word(s).
+function injectInlineMarkers(html: string): string {
+  return html
+    // Color spans — capture 6-char hex, strip the #
+    .replace(/<span[^>]*style="[^"]*color:\s*#([A-Fa-f0-9]{6})[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+      (_, hex, inner) => `[C:${hex.toUpperCase()}]${inner}[/C]`)
+    .replace(/<strong>([\s\S]*?)<\/strong>/gi, "[B]$1[/B]")
+    .replace(/<em>([\s\S]*?)<\/em>/gi, "[I]$1[/I]")
+    .replace(/<u>([\s\S]*?)<\/u>/gi, "[U]$1[/U]");
+}
+
+// Parse text containing [U], [B], [I], [C:RRGGBB] markers into multiple TextRuns.
+// Falls back to a single TextRun with base style if no markers are found.
+function parseStyledRuns(
+  text: string,
+  base: { bold?: boolean; italics?: boolean }
+): TextRun[] {
+  const MARKER_RE = /\[(U|B|I|C:[A-F0-9]{6})\]([\s\S]*?)\[\/[UBIC]\]/gi;
+  const runs: TextRun[] = [];
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = MARKER_RE.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      runs.push(new TextRun({ ...base, text: text.slice(lastIndex, m.index) }));
+    }
+    const tag = m[1].toUpperCase();
+    const inner = m[2];
+    const style: { text: string; bold?: boolean; italics?: boolean; underline?: {}; color?: string } =
+      { ...base, text: inner };
+    if (tag === "B") style.bold = true;
+    else if (tag === "I") style.italics = true;
+    else if (tag === "U") style.underline = {};
+    else if (tag.startsWith("C:")) style.color = tag.slice(2);
+    runs.push(new TextRun(style));
+    lastIndex = m.index + m[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    runs.push(new TextRun({ ...base, text: text.slice(lastIndex) }));
+  }
+
+  return runs.length > 0 ? runs : [new TextRun({ ...base, text })];
+}
 
 export interface DocxBlock {
   type: "paragraph" | "heading" | "table" | "image";
@@ -172,17 +219,18 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
       }
     } else if (tag === "p") {
       const isCode = /<code>/i.test(content);
-      const isBold = /<strong>/i.test(content);
-      const isItalic = /<em>/i.test(content);
-      const plainText = stripToText(content);
+      // Inject style markers before stripping tags so they survive into block.text
+      const marked = injectInlineMarkers(content);
+      const plainText = stripToText(marked);
 
       if (!plainText) continue;
 
       const emojiPrefix = extractLeadingEmoji(plainText) || undefined;
 
-      blocks.push({ type: "paragraph", text: plainText, isBold, isItalic, isCode, emojiPrefix });
+      blocks.push({ type: "paragraph", text: plainText, isCode, emojiPrefix });
     } else if (tag === "blockquote") {
-      const plainText = stripToText(content);
+      const marked = injectInlineMarkers(content);
+      const plainText = stripToText(marked);
       if (!plainText) continue;
 
       const emojiPrefix = extractLeadingEmoji(plainText) || undefined;
@@ -322,9 +370,7 @@ export async function buildDocx(
           border: block.isBlockQuote
             ? { left: { style: BorderStyle.SINGLE, size: 6, space: 8, color: "AAAAAA" } }
             : undefined,
-          children: [
-            new TextRun({ text: finalText, bold: block.isBold, italics: block.isItalic }),
-          ],
+          children: parseStyledRuns(finalText, { bold: block.isBold, italics: block.isItalic }),
         })
       );
     }

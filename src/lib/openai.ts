@@ -43,6 +43,7 @@ RULES — follow exactly:
 3. NEVER translate technical identifiers: URLs, email addresses, file paths, code snippets, chemical formulas, mathematical expressions, model numbers.
 4. Maintain the EXACT same tone and register as the source (formal stays formal, casual stays casual, technical stays technical, legal stays legal).
 5. Preserve ALL formatting markers exactly as written — output them verbatim, never translate or modify them: [IMG_1], [TABLE_1], [TABLE_1_ROW_0_COL_0], [CODE_1], [PAGEBREAK], etc.
+9. Inline style markers wrap words that have special formatting: [U]...[/U] = underline, [B]...[/B] = bold, [I]...[/I] = italic, [C:RRGGBB]...[/C] = color. Translate the text INSIDE the markers and keep the markers tightly around the translated equivalent word(s). Never move, duplicate, nest, or remove these markers.
 6. Use the previously translated content in <context> to maintain consistent terminology.
 7. Output ONLY the translated text with preserved markers. No explanations, notes, or commentary.
 8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.${termOverride}
