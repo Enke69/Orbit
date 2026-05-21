@@ -82,13 +82,14 @@ export async function POST(req: NextRequest) {
           translatedBuffer = await Packer.toBuffer(doc);
         }
       } else {
-        const { extractDocx, buildDocx, parseTranslatedOutput } = await import("@/lib/docx-processor");
+        const { extractDocx, buildDocx, parseTranslatedOutput, parseTableCellTranslations } = await import("@/lib/docx-processor");
         const originalBuffer = await downloadFile(translation.originalFilePath);
         const extracted = await extractDocx(originalBuffer);
         const translatedMap = parseTranslatedOutput(fullTranslated, extracted.blocks.length);
+        const tableCellMap = parseTableCellTranslations(fullTranslated);
 
         if (job.outputFormat === "docx") {
-          translatedBuffer = await buildDocx(extracted.blocks, translatedMap);
+          translatedBuffer = await buildDocx(extracted.blocks, translatedMap, tableCellMap);
         } else {
           const { buildPdf } = await import("@/lib/pdf-processor");
           // Convert block map to pdf blocks format

@@ -70,8 +70,12 @@ export async function translateChunk(
         model: TRANSLATION_MODEL,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
-        max_completion_tokens: 4096,
+        max_completion_tokens: 8192,
       });
+
+      if (response.choices[0]?.finish_reason === "length") {
+        console.warn("[translateChunk] Response hit token limit — output may be truncated");
+      }
 
       return response.choices[0]?.message?.content?.trim() ?? text;
     } catch (err: unknown) {

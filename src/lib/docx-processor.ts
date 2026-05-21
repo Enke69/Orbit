@@ -5,49 +5,86 @@ import {
   Paragraph,
   TextRun,
   HeadingLevel,
-  AlignmentType,
-  ImageRun,
   Table,
   TableRow,
   TableCell,
   WidthType,
+  BorderStyle,
 } from "docx";
+
+// Extract leading emoji/symbols at the start of a string (stripped before translation, prepended after)
+function extractLeadingEmoji(text: string): string {
+  let i = 0;
+  while (i < text.length) {
+    const cp = text.codePointAt(i);
+    if (cp === undefined) break;
+    const isEmoji =
+      (cp >= 0x2600 && cp <= 0x27bf) ||  // Misc symbols, Dingbats
+      (cp >= 0x2b00 && cp <= 0x2bff) ||  // Misc symbols & arrows
+      (cp >= 0x1f000 && cp <= 0x1ffff);  // Emoji, symbols & pictographs
+    if (isEmoji) {
+      i += cp > 0xffff ? 2 : 1; // supplementary plane chars use 2 UTF-16 code units
+    } else if (text[i] === " " && i > 0) {
+      i++;
+      break;
+    } else {
+      break;
+    }
+  }
+  return i > 0 ? text.slice(0, i) : "";
+}
+
+// Values that should never be translated: codes/IDs, ISO dates, version strings
+const NO_TRANSLATE_RE = /^([\w]+-\d+|\d{4}-\d{2}-\d{2}|v\d+(\.\d+)*|[A-Z0-9]{2,}-[A-Z0-9-]+|\d+(\.\d+)*)$/;
+
+// Map Word named styles to semantic HTML so we can detect them
+const MAMMOTH_STYLE_MAP = [
+  "p[style-name='Quote'] => blockquote:fresh > p",
+  "p[style-name='Intense Quote'] => blockquote:fresh > p",
+  "p[style-name='Block Text'] => blockquote:fresh > p",
+  "p[style-name='Code'] => pre > code:fresh",
+  "p[style-name='HTML Code'] => pre > code:fresh",
+  "p[style-name='Code Block'] => pre > code:fresh",
+  "p[style-name='Preformatted Text'] => pre > code:fresh",
+].join("\n");
 
 export interface DocxBlock {
   type: "paragraph" | "heading" | "table" | "image";
-  text?: string;         // for paragraph/heading
-  level?: number;        // 1-6 for headings
-  placeholder?: string;  // e.g. "[TABLE_1]", "[IMG_1]"
-  rawData?: unknown;     // original mammoth element for tables/images
+  text?: string;           // full original text (includes emoji prefix)
+  level?: number;          // 1-6 for headings
+  placeholder?: string;    // e.g. "[TABLE_1]", "[IMG_1]"
+  rawData?: unknown;
   alignment?: string;
   isBold?: boolean;
   isItalic?: boolean;
+  isBlockQuote?: boolean;  // apply left indent + left border in output
+  isCode?: boolean;        // never translate; copy byte-for-byte to output
+  emojiPrefix?: string;    // leading emoji stripped before sending to translation
+  cells?: string[][];      // [row][col] = cell text (table blocks only)
 }
 
 export interface ExtractedDocx {
   blocks: DocxBlock[];
   charCount: number;
-  translatable: string; // all text concatenated with [BLOCK_N] markers for AI
+  translatable: string;
 }
 
-// Extract structured content from a DOCX buffer
 export async function extractDocx(buffer: Buffer): Promise<ExtractedDocx> {
-  const result = await mammoth.extractRawText({ buffer });
-  const fullText = result.value;
-
-  // Use mammoth's HTML output to detect structure
-  const htmlResult = await mammoth.convertToHtml({ buffer });
+  const htmlResult = await mammoth.convertToHtml(
+    { buffer },
+    { styleMap: MAMMOTH_STYLE_MAP }
+  );
   const html = htmlResult.value;
-
   const blocks = parseHtmlToBlocks(html);
+
   const charCount = blocks
     .filter((b) => b.text)
     .reduce((sum, b) => sum + (b.text?.length ?? 0), 0);
 
-  // Build translatable string: text blocks get [BLOCK_N] markers
   let translatable = "";
   let imgCount = 0;
   let tableCount = 0;
+
   blocks.forEach((block, i) => {
     if (block.type === "image") {
       imgCount++;
@@ -57,41 +94,111 @@ export async function extractDocx(buffer: Buffer): Promise<ExtractedDocx> {
       tableCount++;
       block.placeholder = `[TABLE_${tableCount}]`;
       translatable += `[TABLE_${tableCount}]\n`;
+      // Add each translatable cell with row/col coordinates
+      block.cells?.forEach((row, r) => {
+        row.forEach((cellText, c) => {
+          const trimmed = cellText.trim();
+          if (trimmed && !NO_TRANSLATE_RE.test(trimmed)) {
+            translatable += `[TABLE_${tableCount}_ROW_${r}_COL_${c}] ${trimmed}\n`;
+          }
+        });
+      });
+    } else if (block.isCode) {
+      // Code blocks are opaque — never send to translation API
+      translatable += `[CODE_${i}]\n`;
     } else if (block.text) {
-      translatable += `[BLOCK_${i}] ${block.text}\n`;
+      // Strip emoji prefix before translation; it will be prepended back in buildDocx
+      const textToTranslate = block.emojiPrefix
+        ? block.text.slice(block.emojiPrefix.length).trim()
+        : block.text;
+      if (textToTranslate) {
+        translatable += `[BLOCK_${i}] ${textToTranslate}\n`;
+      }
     }
   });
 
   return { blocks, charCount, translatable };
 }
 
+function brToNewline(html: string): string {
+  return html.replace(/<br\s*\/?>/gi, "\n");
+}
+
+// Strip HTML tags; convert </p> and </li> to newlines to preserve paragraph breaks
+function stripToText(html: string): string {
+  return brToNewline(html)
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseTableCells(tableHtml: string): string[][] {
+  const rows: string[][] = [];
+  const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch;
+
+  while ((rowMatch = rowPattern.exec(tableHtml)) !== null) {
+    const cells: string[] = [];
+    const cellPattern = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let cellMatch;
+
+    while ((cellMatch = cellPattern.exec(rowMatch[1])) !== null) {
+      cells.push(stripToText(cellMatch[1]));
+    }
+
+    if (cells.length > 0) rows.push(cells);
+  }
+
+  return rows;
+}
+
 function parseHtmlToBlocks(html: string): DocxBlock[] {
   const blocks: DocxBlock[] = [];
-  // Simple regex-based HTML parser — handles mammoth's clean output
-  const tagPattern = /<(h[1-6]|p|table|img)[^>]*>([\s\S]*?)<\/\1>|<img[^>]*>/gi;
-  let match;
+  const tagPattern = /<(h[1-6]|p|blockquote|pre|table|img)[^>]*>([\s\S]*?)<\/\1>|<img[^>]*\/?>/gi;
 
+  let match;
   while ((match = tagPattern.exec(html)) !== null) {
     const tag = match[1]?.toLowerCase();
     const content = match[2] ?? "";
-    const plainText = content.replace(/<[^>]+>/g, "").trim();
 
     if (!tag) continue;
 
-    if (tag.match(/^h[1-6]$/)) {
-      blocks.push({
-        type: "heading",
-        text: plainText,
-        level: parseInt(tag[1]),
-      });
-    } else if (tag === "p") {
+    if (/^h[1-6]$/.test(tag)) {
+      const plainText = stripToText(content);
       if (plainText) {
-        const isBold = /<strong>/i.test(content);
-        const isItalic = /<em>/i.test(content);
-        blocks.push({ type: "paragraph", text: plainText, isBold, isItalic });
+        blocks.push({ type: "heading", text: plainText, level: parseInt(tag[1]) });
+      }
+    } else if (tag === "p") {
+      const isCode = /<code>/i.test(content);
+      const isBold = /<strong>/i.test(content);
+      const isItalic = /<em>/i.test(content);
+      const plainText = stripToText(content);
+
+      if (!plainText) continue;
+
+      const emojiPrefix = extractLeadingEmoji(plainText) || undefined;
+
+      blocks.push({ type: "paragraph", text: plainText, isBold, isItalic, isCode, emojiPrefix });
+    } else if (tag === "blockquote") {
+      const plainText = stripToText(content);
+      if (!plainText) continue;
+
+      const emojiPrefix = extractLeadingEmoji(plainText) || undefined;
+
+      blocks.push({ type: "paragraph", text: plainText, isBlockQuote: true, emojiPrefix });
+    } else if (tag === "pre") {
+      // Code block — preserve whitespace and newlines, never translate
+      const codeText = brToNewline(content).replace(/<[^>]+>/g, "");
+      if (codeText.trim()) {
+        blocks.push({ type: "paragraph", text: codeText, isCode: true });
       }
     } else if (tag === "table") {
-      blocks.push({ type: "table", rawData: content });
+      const cells = parseTableCells(content);
+      if (cells.length > 0) {
+        blocks.push({ type: "table", cells, rawData: content });
+      }
     } else if (tag === "img") {
       blocks.push({ type: "image" });
     }
@@ -100,14 +207,40 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
   return blocks;
 }
 
+// Parse [BLOCK_N] markers from AI output → block index → translated text
+export function parseTranslatedOutput(translatedText: string, blockCount: number): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const line of translatedText.split("\n")) {
+    const m = line.match(/^\[BLOCK_(\d+)\]\s*(.*)/);
+    if (m) {
+      const idx = parseInt(m[1]);
+      if (idx < blockCount) map.set(idx, m[2].trim());
+    }
+  }
+  return map;
+}
+
+// Parse [TABLE_N_ROW_R_COL_C] markers → "tableIdx_row_col" → translated text
+export function parseTableCellTranslations(translatedText: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const line of translatedText.split("\n")) {
+    const m = line.match(/^\[TABLE_(\d+)_ROW_(\d+)_COL_(\d+)\]\s*(.*)/);
+    if (m) {
+      map.set(`${m[1]}_${m[2]}_${m[3]}`, m[4].trim());
+    }
+  }
+  return map;
+}
+
 // Rebuild DOCX with translated text injected back into blocks
 export async function buildDocx(
   blocks: DocxBlock[],
-  translatedMap: Map<number, string>
+  translatedMap: Map<number, string>,
+  tableCellMap?: Map<string, string>
 ): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
 
-  const headingLevels: Record<number, typeof HeadingLevel[keyof typeof HeadingLevel]> = {
+  const headingLevels: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
     1: HeadingLevel.HEADING_1,
     2: HeadingLevel.HEADING_2,
     3: HeadingLevel.HEADING_3,
@@ -116,9 +249,10 @@ export async function buildDocx(
     6: HeadingLevel.HEADING_6,
   };
 
+  let tableCount = 0;
+
   blocks.forEach((block, i) => {
-    if (block.type === "image" || block.type === "table") {
-      // Keep placeholder paragraph for images/tables
+    if (block.type === "image") {
       children.push(
         new Paragraph({
           children: [new TextRun({ text: block.placeholder ?? "", color: "888888", size: 18 })],
@@ -127,53 +261,75 @@ export async function buildDocx(
       return;
     }
 
-    const text = translatedMap.get(i) ?? block.text ?? "";
+    if (block.type === "table") {
+      tableCount++;
+      const tIdx = tableCount;
+      const rows = block.cells ?? [];
+      if (rows.length === 0) return;
+
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: rows.map((row, r) =>
+            new TableRow({
+              children: row.map((cellText, c) => {
+                const translated = tableCellMap?.get(`${tIdx}_${r}_${c}`);
+                return new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: [new TextRun({ text: translated ?? cellText })],
+                    }),
+                  ],
+                });
+              }),
+            })
+          ),
+        })
+      );
+      return;
+    }
+
+    // Code blocks: copy original text line-by-line, never replace with translation
+    if (block.isCode) {
+      for (const line of (block.text ?? "").split("\n")) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: line, font: "Courier New", size: 18 })],
+          })
+        );
+      }
+      return;
+    }
+
+    // Reconstruct text: translated body + restored emoji prefix
+    const translatedBody =
+      translatedMap.get(i) ??
+      (block.emojiPrefix ? block.text?.slice(block.emojiPrefix.length).trim() : block.text) ??
+      "";
+    const finalText = block.emojiPrefix ? block.emojiPrefix + translatedBody : translatedBody;
 
     if (block.type === "heading" && block.level) {
       children.push(
         new Paragraph({
-          text,
+          text: finalText,
           heading: headingLevels[block.level] ?? HeadingLevel.HEADING_1,
         })
       );
     } else {
       children.push(
         new Paragraph({
+          indent: block.isBlockQuote ? { left: 720, right: 720 } : undefined,
+          border: block.isBlockQuote
+            ? { left: { style: BorderStyle.SINGLE, size: 6, space: 8, color: "AAAAAA" } }
+            : undefined,
           children: [
-            new TextRun({
-              text,
-              bold: block.isBold,
-              italics: block.isItalic,
-            }),
+            new TextRun({ text: finalText, bold: block.isBold, italics: block.isItalic }),
           ],
         })
       );
     }
   });
 
-  const doc = new Document({
-    sections: [{ children }],
-  });
-
+  const doc = new Document({ sections: [{ children }] });
   return Packer.toBuffer(doc);
-}
-
-// Parse the AI output back into a block-index → text map
-export function parseTranslatedOutput(
-  translatedText: string,
-  blockCount: number
-): Map<number, string> {
-  const map = new Map<number, string>();
-  const lines = translatedText.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/^\[BLOCK_(\d+)\]\s*(.*)/);
-    if (match) {
-      const idx = parseInt(match[1]);
-      const text = match[2].trim();
-      if (idx < blockCount) map.set(idx, text);
-    }
-  }
-
-  return map;
 }
