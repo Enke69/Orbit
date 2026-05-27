@@ -39,11 +39,11 @@ export const t = {
         },
         {
           name: "Monthly", price: "₮25,000", period: "/ month", featured: true, cta: "Get started",
-          features: ["75 translations / month", "3 translations / day", "PDF & Word upload", "7-day history"],
+          features: ["75 translations / month", "3 translations / day", "PDF & Word upload", "30-day history"],
         },
         {
           name: "VIP", price: "₮1,990,000", period: "/ year", featured: false, cta: "Get VIP",
-          features: ["100 translations / day", "PDF & Word upload", "30-day history", "Priority support"],
+          features: ["100 translations / day", "PDF & Word upload", "180-day history", "Priority support"],
         },
       ],
     },
@@ -171,11 +171,11 @@ export const t = {
         },
         {
           name: "Сарын", price: "₮25,000", period: "/ сар", featured: true, cta: "Эхлэх",
-          features: ["Сард 75 орчуулга", "Өдөрт 3 орчуулга", "PDF, Word оруулах", "7 хоногийн түүх"],
+          features: ["Сард 75 орчуулга", "Өдөрт 3 орчуулга", "PDF, Word оруулах", "30 хоногийн түүх"],
         },
         {
           name: "VIP", price: "₮1,990,000", period: "/ жил", featured: false, cta: "VIP авах",
-          features: ["Өдөрт 100 орчуулга", "PDF, Word оруулах", "30 хоногийн түүх", "Тэргүүлэх дэмжлэг"],
+          features: ["Өдөрт 100 орчуулга", "PDF, Word оруулах", "180 хоногийн түүх", "Тэргүүлэх дэмжлэг"],
         },
       ],
     },

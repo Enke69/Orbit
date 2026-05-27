@@ -9,8 +9,6 @@ import { formatDistanceToNow } from "date-fns";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 
-const FREE_HISTORY_LIMIT = 3;
-
 interface Translation {
   id: string;
   originalFileName: string;
@@ -25,14 +23,13 @@ interface Props {
   translations: Translation[];
   totalCount: number;
   isAdmin: boolean;
+  hiddenCount?: number;
 }
 
-export function HistoryView({ translations, totalCount, isAdmin }: Props) {
+export function HistoryView({ translations, totalCount, isAdmin, hiddenCount = 0 }: Props) {
   const { lang } = useLanguage();
   const tr = t[lang].history;
   const trStatus = t[lang].status;
-
-  const hiddenCount = isAdmin ? 0 : Math.max(0, totalCount - FREE_HISTORY_LIMIT);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -125,7 +122,7 @@ export function HistoryView({ translations, totalCount, isAdmin }: Props) {
               {tr.hiddenBanner(hiddenCount)}
             </p>
             <p className="text-xs text-cosmos-dust/60 mt-0.5">
-              {tr.hiddenSub(FREE_HISTORY_LIMIT)}
+              {tr.hiddenSub(3)}
             </p>
           </div>
           <Link href="/dashboard" className="flex-shrink-0">
