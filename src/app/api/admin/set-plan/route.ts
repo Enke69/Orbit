@@ -13,11 +13,11 @@ export async function POST(req: NextRequest) {
 
   const { userId, plan, expiresAt } = (await req.json()) as {
     userId: string;
-    plan: "FREE" | "MONTHLY" | "VIP";
+    plan: "FREE" | "WEEKLY" | "MONTHLY" | "VIP";
     expiresAt?: string;
   };
 
-  if (!userId || !["FREE", "MONTHLY", "VIP"].includes(plan)) {
+  if (!userId || !["FREE", "WEEKLY", "MONTHLY", "VIP"].includes(plan)) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 

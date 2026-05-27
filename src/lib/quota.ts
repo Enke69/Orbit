@@ -1,21 +1,24 @@
 import { prisma } from "./prisma";
 
-export type Plan = "FREE" | "MONTHLY" | "VIP";
+export type Plan = "FREE" | "WEEKLY" | "MONTHLY" | "VIP";
 
-export const PLAN_LIMITS: Record<Plan, { daily: number; monthly: number | null }> = {
-  FREE:    { daily: 1,   monthly: null },
-  MONTHLY: { daily: 3,   monthly: 75   },
-  VIP:     { daily: 100, monthly: null },
+export const PLAN_LIMITS: Record<Plan, { daily: number; weekly: number | null; monthly: number | null }> = {
+  FREE:    { daily: 1,   weekly: null, monthly: null },
+  WEEKLY:  { daily: 3,   weekly: 20,   monthly: null },
+  MONTHLY: { daily: 5,   weekly: null, monthly: 75   },
+  VIP:     { daily: 100, weekly: null, monthly: null },
 };
 
 export const TEXT_LIMITS: Record<Plan, { daily: number; maxChars: number | null }> = {
   FREE:    { daily: 3,   maxChars: 15_000 },
+  WEEKLY:  { daily: 5,   maxChars: 15_000 },
   MONTHLY: { daily: 10,  maxChars: 20_000 },
   VIP:     { daily: 100, maxChars: null   },
 };
 
 export const PLAN_LABELS: Record<Plan, { en: string; mn: string }> = {
   FREE:    { en: "Free",    mn: "Үнэгүй" },
+  WEEKLY:  { en: "Weekly",  mn: "7 хоног" },
   MONTHLY: { en: "Monthly", mn: "Сарын"  },
   VIP:     { en: "VIP",     mn: "VIP"    },
 };
@@ -58,33 +61,34 @@ export async function checkTranslationQuota(userId: string): Promise<{
   const limits = PLAN_LIMITS[plan];
 
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since7d  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000);
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const [dailyCount, monthlyCount] = await Promise.all([
+  const [dailyCount, weeklyCount, monthlyCount] = await Promise.all([
     prisma.translation.count({ where: { userId, createdAt: { gte: since24h } } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: since7d  } } }),
     prisma.translation.count({ where: { userId, createdAt: { gte: startOfMonth } } }),
   ]);
 
   if (dailyCount >= limits.daily) {
     return {
-      allowed: false,
-      plan,
-      isAdmin: false,
-      dailyCount,
-      monthlyCount,
+      allowed: false, plan, isAdmin: false, dailyCount, monthlyCount,
       error: `Daily limit reached (${limits.daily}/day). Try again tomorrow.`,
+    };
+  }
+
+  if (limits.weekly !== null && weeklyCount >= limits.weekly) {
+    return {
+      allowed: false, plan, isAdmin: false, dailyCount, monthlyCount,
+      error: `Weekly limit reached (${limits.weekly}/week). Resets in 7 days.`,
     };
   }
 
   if (limits.monthly !== null && monthlyCount >= limits.monthly) {
     return {
-      allowed: false,
-      plan,
-      isAdmin: false,
-      dailyCount,
-      monthlyCount,
+      allowed: false, plan, isAdmin: false, dailyCount, monthlyCount,
       error: `Monthly limit reached (${limits.monthly}/month).`,
     };
   }

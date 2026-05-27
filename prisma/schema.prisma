@@ -29,6 +29,7 @@ model User {
 
 enum Plan {
   FREE
+  WEEKLY
   MONTHLY
   VIP
 }

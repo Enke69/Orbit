@@ -8,7 +8,7 @@ import { Users, Crown, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "react-hot-toast";
 
-type Plan = "FREE" | "MONTHLY" | "VIP";
+type Plan = "FREE" | "WEEKLY" | "MONTHLY" | "VIP";
 
 interface User {
   id: string;
@@ -23,12 +23,14 @@ interface User {
 
 const PLAN_VARIANTS: Record<Plan, "default" | "info" | "warning" | "success"> = {
   FREE: "default",
+  WEEKLY: "warning",
   MONTHLY: "info",
   VIP: "success",
 };
 
 const PLAN_LABELS: Record<Plan, string> = {
   FREE: "Free",
+  WEEKLY: "Weekly",
   MONTHLY: "Monthly",
   VIP: "VIP",
 };
@@ -73,7 +75,7 @@ export function AdminView({ users: initialUsers }: { users: User[] }) {
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        {(["FREE", "MONTHLY", "VIP"] as Plan[]).map((plan) => {
+        {(["FREE", "WEEKLY", "MONTHLY", "VIP"] as Plan[]).map((plan) => {
           const count = users.filter((u) => u.plan === plan).length;
           return (
             <Card key={plan} className="text-center py-4">
@@ -140,7 +142,7 @@ export function AdminView({ users: initialUsers }: { users: User[] }) {
 
               {/* Plan buttons */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {(["FREE", "MONTHLY", "VIP"] as Plan[]).map((plan) => (
+                {(["FREE", "WEEKLY", "MONTHLY", "VIP"] as Plan[]).map((plan) => (
                   <Button
                     key={plan}
                     size="sm"

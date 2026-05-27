@@ -101,6 +101,8 @@ export default function HomePage() {
                   ? "/dashboard"
                   : plan.name === "VIP"
                   ? "/subscribe/vip"
+                  : plan.name === "Weekly" || plan.name === "7 хоног"
+                  ? "/subscribe/weekly"
                   : "/subscribe/monthly"
               }>
                 <Button variant={plan.featured ? "cosmic" : "outline"} className="w-full">

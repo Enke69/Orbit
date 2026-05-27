@@ -38,7 +38,7 @@ export default async function HistoryPage() {
       ]);
       hiddenCount = Math.max(0, totalCount - FREE_LIMIT);
     } else {
-      const days = plan === "VIP" ? 180 : 30; // MONTHLY = 30 days, VIP = 180 days
+      const days = plan === "VIP" ? 180 : plan === "WEEKLY" ? 7 : 30; // VIP=180d, WEEKLY=7d, MONTHLY=30d
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
       translations = await prisma.translation.findMany({
         where: { userId, createdAt: { gte: since } },

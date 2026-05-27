@@ -11,6 +11,10 @@ const ACCOUNT_NUMBER = "MN88000500 5427010779";
 
 const content = {
   en: {
+    weekly: {
+      greeting: "Hello!",
+      body: `If you want to subscribe to Orbit Weekly, please send ₮9,900 to ${ACCOUNT_NUMBER} with your email address in the payment description to activate your account.`,
+    },
     monthly: {
       greeting: "Hello!",
       body: `If you want to subscribe to Orbit Monthly, please send ₮25,000 to ${ACCOUNT_NUMBER} with your email address in the payment description to activate your account.`,
@@ -27,6 +31,10 @@ const content = {
     goFree: "Continue with Free",
   },
   mn: {
+    weekly: {
+      greeting: "Сайн байна уу!",
+      body: `Хэрэв та Orbit 7 хоногийн хувилбарыг авахыг хүсвэл ${ACCOUNT_NUMBER} данс руу ₮9,900 шилжүүлж, гүйлгээний утга дээр өөрийн имэйл хаягаа бичнэ үү. Ингэснээр идэвхжүүлэлт хийгдэх болно.`,
+    },
     monthly: {
       greeting: "Сайн байна уу!",
       body: `Хэрэв та Orbit Сарын хувилбарыг авахыг хүсвэл ${ACCOUNT_NUMBER} данс руу ₮25,000 шилжүүлж, гүйлгээний утга дээр өөрийн имэйл хаягаа бичнэ үү. Ингэснээр идэвхжүүлэлт хийгдэх болно.`,
@@ -44,14 +52,21 @@ const content = {
   },
 };
 
+const PLAN_BADGE: Record<string, { en: string; mn: string }> = {
+  weekly:  { en: "Weekly",  mn: "7 хоног" },
+  monthly: { en: "Monthly", mn: "Сарын"   },
+  vip:     { en: "VIP",     mn: "VIP"     },
+};
+
 export default function SubscribePage({ params }: { params: { plan: string } }) {
   const { plan } = params;
   const { lang } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   const tr = content[lang];
-  const planKey = plan === "vip" ? "vip" : "monthly";
+  const planKey = plan === "vip" ? "vip" : plan === "weekly" ? "weekly" : "monthly";
   const planContent = tr[planKey];
+  const badge = PLAN_BADGE[planKey]?.[lang] ?? planKey;
 
   function handleCopy() {
     navigator.clipboard.writeText(ACCOUNT_NUMBER);
@@ -70,7 +85,7 @@ export default function SubscribePage({ params }: { params: { plan: string } }) 
       <div className="w-full max-w-md glass-card rounded-2xl p-8 border border-cosmos-purple-bright/20 shadow-cosmic space-y-6 text-center">
         {/* Plan badge */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cosmos-purple-bright/30 bg-cosmos-purple-bright/10 text-sm text-cosmos-purple-light font-semibold">
-          {planKey === "vip" ? "VIP" : lang === "mn" ? "Сарын" : "Monthly"}
+          {badge}
         </div>
 
         <div>

@@ -29,14 +29,16 @@ interface Props {
   recentTranslations: Translation[];
 }
 
-const PLAN_BADGE_VARIANTS: Record<Plan, "default" | "info" | "success"> = {
+const PLAN_BADGE_VARIANTS: Record<Plan, "default" | "info" | "warning" | "success"> = {
   FREE: "default",
+  WEEKLY: "warning",
   MONTHLY: "info",
   VIP: "success",
 };
 
 const PLAN_ICONS: Record<Plan, typeof Zap> = {
   FREE: Zap,
+  WEEKLY: Zap,
   MONTHLY: Crown,
   VIP: Crown,
 };
