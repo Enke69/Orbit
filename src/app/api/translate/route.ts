@@ -63,12 +63,14 @@ export async function POST(req: NextRequest) {
   const chunks = chunkTranslatableText(extracted.translatable);
   const lang = await detectLanguage(extracted.translatable.slice(0, 500));
 
-  // Save chunk job data to storage so the chunk route can access it
+  // Save chunk job data to storage so the chunk route can access it.
+  // Blocks are re-extracted from the original file at rebuild time, so strip
+  // base64 image payloads here — they'd bloat the job JSON for nothing.
   const jobData = {
     ext,
     outputFormat,
     userId,
-    blocks: extracted.blocks,
+    blocks: (extracted.blocks as { imgData?: string }[]).map(({ imgData: _imgData, ...rest }) => rest),
     chunks: chunks.map((c) => ({ text: c.text })),
     translatedChunks: [] as string[],
     contextSummary: "",

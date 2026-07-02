@@ -4,6 +4,7 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  ImageRun,
   HeadingLevel,
   Table,
   TableRow,
@@ -11,6 +12,35 @@ import {
   WidthType,
   BorderStyle,
 } from "docx";
+
+// Mammoth embeds DOCX images as data URIs by default — capture them so they
+// can be re-embedded in the output instead of becoming [IMG_N] placeholder text
+const IMG_TAG_RE = /<img[^>]*src="data:image\/(png|jpe?g|gif);base64,([^"]+)"[^>]*>/gi;
+
+// Minimal header parsers — docx's ImageRun requires explicit pixel dimensions
+function getImageDimensions(buf: Buffer, mime: string): { width: number; height: number } | null {
+  try {
+    if (mime === "png" && buf.length >= 24) {
+      return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+    if ((mime === "jpeg" || mime === "jpg") && buf.length > 4) {
+      let pos = 2;
+      while (pos + 9 < buf.length) {
+        if (buf[pos] !== 0xff) { pos++; continue; }
+        const marker = buf[pos + 1];
+        // SOF0–SOF15 excluding DHT/JPG/DAC carry the frame dimensions
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+          return { height: buf.readUInt16BE(pos + 5), width: buf.readUInt16BE(pos + 7) };
+        }
+        pos += 2 + buf.readUInt16BE(pos + 2);
+      }
+    }
+    if (mime === "gif" && buf.length >= 10) {
+      return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+    }
+  } catch { /* corrupt header — caller falls back */ }
+  return null;
+}
 
 // Extract leading emoji/symbols at the start of a string (stripped before translation, prepended after)
 function extractLeadingEmoji(text: string): string {
@@ -108,6 +138,8 @@ export interface DocxBlock {
   isCode?: boolean;        // never translate; copy byte-for-byte to output
   emojiPrefix?: string;    // leading emoji stripped before sending to translation
   cells?: string[][];      // [row][col] = cell text (table blocks only)
+  imgData?: string;        // base64 image payload (image blocks only)
+  imgMime?: string;        // "png" | "jpeg" | "jpg" | "gif"
 }
 
 export interface ExtractedDocx {
@@ -201,6 +233,21 @@ function parseTableCells(tableHtml: string): string[][] {
   return rows;
 }
 
+// Pull data-URI images out of an HTML fragment as image blocks
+function extractImageBlocks(fragment: string): DocxBlock[] {
+  const found: DocxBlock[] = [];
+  IMG_TAG_RE.lastIndex = 0;
+  let im: RegExpExecArray | null;
+  while ((im = IMG_TAG_RE.exec(fragment)) !== null) {
+    found.push({ type: "image", imgMime: im[1].toLowerCase(), imgData: im[2] });
+  }
+  // <img> without a data URI still gets a placeholder block
+  if (found.length === 0 && /<img[^>]*>/i.test(fragment)) {
+    found.push({ type: "image" });
+  }
+  return found;
+}
+
 function parseHtmlToBlocks(html: string): DocxBlock[] {
   const blocks: DocxBlock[] = [];
   const tagPattern = /<(h[1-6]|p|blockquote|pre|table|img)[^>]*>([\s\S]*?)<\/\1>|<img[^>]*\/?>/gi;
@@ -210,7 +257,11 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
     const tag = match[1]?.toLowerCase();
     const content = match[2] ?? "";
 
-    if (!tag) continue;
+    if (!tag) {
+      // Standalone (self-closing) <img> matched by the second alternative
+      blocks.push(...extractImageBlocks(match[0]));
+      continue;
+    }
 
     if (/^h[1-6]$/.test(tag)) {
       const plainText = stripToText(content);
@@ -218,6 +269,11 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
         blocks.push({ type: "heading", text: plainText, level: parseInt(tag[1]) });
       }
     } else if (tag === "p") {
+      // Mammoth wraps images in <p> — lift them out before stripping tags
+      if (/<img/i.test(content)) {
+        blocks.push(...extractImageBlocks(content));
+      }
+
       const isCode = /<code>/i.test(content);
       // Inject style markers before stripping tags so they survive into block.text
       const marked = injectInlineMarkers(content);
@@ -229,6 +285,10 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
 
       blocks.push({ type: "paragraph", text: plainText, isCode, emojiPrefix });
     } else if (tag === "blockquote") {
+      if (/<img/i.test(content)) {
+        blocks.push(...extractImageBlocks(content));
+      }
+
       const marked = injectInlineMarkers(content);
       const plainText = stripToText(marked);
       if (!plainText) continue;
@@ -248,7 +308,7 @@ function parseHtmlToBlocks(html: string): DocxBlock[] {
         blocks.push({ type: "table", cells, rawData: content });
       }
     } else if (tag === "img") {
-      blocks.push({ type: "image" });
+      blocks.push(...extractImageBlocks(match[0]));
     }
   }
 
@@ -301,6 +361,31 @@ export async function buildDocx(
 
   blocks.forEach((block, i) => {
     if (block.type === "image") {
+      if (block.imgData && block.imgMime) {
+        try {
+          const data = Buffer.from(block.imgData, "base64");
+          const dims = getImageDimensions(data, block.imgMime) ?? { width: 480, height: 320 };
+          // Fit inside the printable width of an A4 page (~620px at 96dpi)
+          const MAX_WIDTH = 550;
+          const scale = Math.min(1, MAX_WIDTH / dims.width);
+          const type = block.imgMime === "png" ? "png" : block.imgMime === "gif" ? "gif" : "jpg";
+          children.push(
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data,
+                  type,
+                  transformation: {
+                    width: Math.max(1, Math.round(dims.width * scale)),
+                    height: Math.max(1, Math.round(dims.height * scale)),
+                  },
+                }),
+              ],
+            })
+          );
+          return;
+        } catch { /* corrupt image — fall through to placeholder */ }
+      }
       children.push(
         new Paragraph({
           children: [new TextRun({ text: block.placeholder ?? "", color: "888888", size: 18 })],
