@@ -5,6 +5,8 @@ import { CheckCircle2, XCircle, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -136,8 +138,15 @@ function overlapsRegion(bx: number, by: number, bw: number, bh: number, regions:
   return false;
 }
 
-function alreadyMongolian(text: string): boolean {
+function isCyrillicText(text: string): boolean {
   return /[Ѐ-ӿ]/.test(text);
+}
+
+// The "already translated" skip heuristic only makes sense when the target
+// language is written in Cyrillic — for e.g. English or Japanese targets it
+// would wrongly drop every translation of a Cyrillic source document.
+function targetUsesCyrillic(targetLanguage: string): boolean {
+  return /mongolian|russian|ukrainian|bulgarian|serbian|kazakh/i.test(targetLanguage);
 }
 
 function makeChunks(lineTexts: LineText[], maxChars: number): LineText[][] {
@@ -429,8 +438,12 @@ interface Props {
 
 type LogEntry = { msg: string; type: "active" | "done" | "error" };
 
+interface GlossaryEntry { source: string; target: string }
+
 export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onComplete, onError }: Props) {
-  const [phase, setPhase] = useState("Loading PDF.js…");
+  const { lang } = useLanguage();
+  const tr = t[lang].pdf;
+  const [phase, setPhase] = useState<string>(t[lang].pdf.loadingLib);
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -438,6 +451,8 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
   const startedRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
   const totalCharsRef = useRef(0);
+  const pdfTokenRef = useRef<string>("");
+  const glossaryRef = useRef<GlossaryEntry[]>([]);
 
   function addLog(msg: string, type: LogEntry["type"] = "active") {
     setLog((prev) => [...prev, { msg, type }]);
@@ -459,47 +474,84 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
   async function translateChunk(lineTexts: LineText[], contextSummary: string): Promise<{ results: (string | null)[]; newContext: string }> {
     const lines = lineTexts.map((lt) => lt.text);
     totalCharsRef.current += lines.reduce((s, l) => s + l.length, 0);
-    const res = await fetch("/api/translate/text", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lines, contextSummary, targetLanguage, translateTerms, internal: true }),
-    });
-    if (res.status === 402) throw new Error("Character limit reached. Please top up your credits.");
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      throw new Error(d.error ?? `Translation error ${res.status}`);
+
+    // Retry transient failures — a single network blip on page 9 of 10 should
+    // not destroy the whole translation
+    const MAX_ATTEMPTS = 3;
+    let lastError: Error = new Error("Translation failed");
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch("/api/translate/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lines,
+            contextSummary,
+            targetLanguage,
+            translateTerms,
+            internal: true,
+            pdfToken: pdfTokenRef.current,
+            glossary: glossaryRef.current.length > 0 ? glossaryRef.current : undefined,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return { results: data.translated, newContext: data.newContext ?? contextSummary };
+        }
+        const d = await res.json().catch(() => ({}));
+        lastError = new Error(d.error ?? `Translation error ${res.status}`);
+        // Quota/session errors won't fix themselves — don't retry
+        if (res.status === 402 || res.status === 403) throw lastError;
+      } catch (err) {
+        if (err instanceof Error) lastError = err;
+        // Rethrow non-retryable errors immediately
+        if (/limit|session/i.test(lastError.message)) throw lastError;
+      }
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, 1500 * Math.pow(2, attempt)));
+      }
     }
-    const data = await res.json();
-    return { results: data.translated, newContext: data.newContext ?? contextSummary };
+    throw lastError;
   }
 
   async function runTranslation() {
     try {
+      // Check the document quota up front and get the session token that
+      // authorizes the pipeline's internal API calls — previously the quota
+      // was only checked at save time, after all the translation spend
+      const startRes = await fetch("/api/translate/start-pdf", { method: "POST" });
+      if (!startRes.ok) {
+        const d = await startRes.json().catch(() => ({}));
+        throw new Error(d.error ?? `Could not start translation (${startRes.status})`);
+      }
+      pdfTokenRef.current = (await startRes.json()).token;
+
       // Load PDF.js
       const pdfjsLib = await loadPdfjsLib() as {
         getDocument: (opts: unknown) => { promise: Promise<unknown> };
         OPS: Record<string, number>;
       };
-      addLog("PDF.js loaded", "done");
+      addLog(tr.libLoaded, "done");
 
-      setProgressState("Loading PDF…", 3);
+      setProgressState(tr.loadingPdf, 3);
       const arrayBuffer = await file.arrayBuffer();
       const pdfDoc = await (pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise) as {
         numPages: number;
         getPage: (n: number) => Promise<unknown>;
       };
       const totalPages = pdfDoc.numPages;
-      addLog(`Found ${totalPages} page${totalPages > 1 ? "s" : ""}`, "done");
+      addLog(tr.foundPages(totalPages), "done");
 
       const SCALE = 2.0;
-      const CHUNK_SIZE = 1000;
+      const CHUNK_SIZE = 2500;
+      const targetIsCyrillic = targetUsesCyrillic(targetLanguage);
       const renderedPages: { imageDataUrl: string; width: number; height: number }[] = [];
       let contextSummary = "";
 
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         const pageBase = 5 + ((pageNum - 1) / totalPages) * 88;
-        setProgressState(`Page ${pageNum} / ${totalPages}…`, pageBase);
-        addLog(`Page ${pageNum}: rendering`);
+        setProgressState(tr.pageOf(pageNum, totalPages), pageBase);
+        addLog(tr.rendering(pageNum));
 
         const page = await pdfDoc.getPage(pageNum) as {
           getViewport: (opts: { scale: number }) => {
@@ -537,10 +589,10 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
           };
         });
 
-        addLog(`Page ${pageNum}: ${items.length} text items`);
+        addLog(tr.textItems(pageNum, items.length));
 
         if (!items.length) {
-          addLog(`Page ${pageNum}: no text, keeping original`, "done");
+          addLog(tr.noText(pageNum), "done");
           renderedPages.push({ imageDataUrl: canvas.toDataURL("image/png"), width: nativeViewport.width, height: nativeViewport.height });
           continue;
         }
@@ -628,35 +680,38 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
         });
 
         const translatableLines = lineTexts.filter((lt) => !skipSet.has(lt._idx) && lt.text.trim().length > 0);
-        addLog(`Page ${pageNum}: ${translatableLines.length} lines to translate`);
+        addLog(tr.linesToTranslate(pageNum, translatableLines.length));
 
         const chunks = makeChunks(translatableLines, CHUNK_SIZE);
         // Values: null = skip (show original), "" = erase-only (cover but draw nothing), string = draw
         const translatedMap: Record<number, string | null> = {};
 
         for (let ci = 0; ci < chunks.length; ci++) {
-          addLog(`Page ${pageNum}: chunk ${ci + 1}/${chunks.length}`);
+          addLog(tr.chunk(pageNum, ci + 1, chunks.length));
           const { results, newContext } = await translateChunk(chunks[ci], contextSummary);
           contextSummary = newContext;
           chunks[ci].forEach((lt, li) => {
             const t = results[li];
             const rawText = lt.text.trim();
             // Short fragment that the model couldn't translate (returned null) —
-            // use erase-only so the orphaned English word gets covered rather than
+            // use erase-only so the orphaned word gets covered rather than
             // floating visibly in an otherwise-translated canvas
-            if (t === null && rawText.length <= 15 && rawText.split(/\s+/).length <= 2 && !alreadyMongolian(rawText)) {
+            if (t === null && rawText.length <= 15 && rawText.split(/\s+/).length <= 2 && !(targetIsCyrillic && isCyrillicText(rawText))) {
               translatedMap[lt._idx] = "";
+            } else if (targetIsCyrillic) {
+              // Skip lines already in the target script (headers/footers etc.)
+              translatedMap[lt._idx] = (t && !isCyrillicText(lt.text)) || isCyrillicText(t ?? "") ? t : null;
             } else {
-              translatedMap[lt._idx] = (t && !alreadyMongolian(lt.text)) || alreadyMongolian(t ?? "") ? t : null;
+              translatedMap[lt._idx] = t;
             }
           });
-          setProgressState(`Page ${pageNum} / ${totalPages}…`, pageBase + ((ci + 1) / chunks.length) * (88 / totalPages));
+          setProgressState(tr.pageOf(pageNum, totalPages), pageBase + ((ci + 1) / chunks.length) * (88 / totalPages));
         }
 
         // Quality-check pass: send original + translated pairs back through GPT
         // with full page context so it can fix cut sentences and orphaned English
         if (translatableLines.length > 0) {
-          addLog(`Page ${pageNum}: quality check`);
+          addLog(tr.qualityCheck(pageNum));
           try {
             const originalTexts = translatableLines.map((lt) => lt.text);
             const translatedTexts = translatableLines.map((lt) => translatedMap[lt._idx] ?? null);
@@ -667,6 +722,8 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
                 original: originalTexts,
                 translated: translatedTexts,
                 targetLanguage,
+                pdfToken: pdfTokenRef.current,
+                glossary: glossaryRef.current.length > 0 ? glossaryRef.current : undefined,
               }),
             });
             if (cleanRes.ok) {
@@ -676,20 +733,41 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
                 const c = cleaned[li];
                 if (c !== undefined) translatedMap[lt._idx] = c;
               });
-              addLog(`Page ${pageNum}: quality check done`, "done");
+              addLog(tr.qualityCheckDone(pageNum), "done");
+            }
+
+            // After the first page: build a glossary from what was just
+            // translated so later pages reuse the same terminology
+            if (pageNum === 1 && totalPages > 1 && glossaryRef.current.length === 0) {
+              try {
+                const glossRes = await fetch("/api/translate/glossary", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    original: originalTexts,
+                    translated: translatableLines.map((lt) => translatedMap[lt._idx] ?? null),
+                    targetLanguage,
+                    pdfToken: pdfTokenRef.current,
+                  }),
+                });
+                if (glossRes.ok) {
+                  const { glossary } = await glossRes.json();
+                  if (Array.isArray(glossary)) glossaryRef.current = glossary;
+                }
+              } catch { /* glossary is best-effort */ }
             }
           } catch { /* non-critical — continue with first-pass translation */ }
         }
 
-        addLog(`Page ${pageNum}: compositing`);
+        addLog(tr.compositing(pageNum));
         const dataUrl = drawTranslatedPage(canvas, lines, translatedMap, skipSet, protectedRegions, SCALE);
         renderedPages.push({ imageDataUrl: dataUrl, width: nativeViewport.width, height: nativeViewport.height });
-        addLog(`Page ${pageNum}: done`, "done");
+        addLog(tr.pageDone(pageNum), "done");
       }
 
       // Assemble PDF
-      setProgressState("Assembling PDF…", 96);
-      addLog("Building final PDF");
+      setProgressState(tr.assembling, 96);
+      addLog(tr.buildingFinal);
 
       const { PDFDocument } = await import("pdf-lib");
       const outDoc = await PDFDocument.create();
@@ -706,8 +784,8 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
       const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
       const blobUrl = URL.createObjectURL(blob);
       setDownloadUrl(blobUrl);
-      setProgressState("Translation complete!", 100);
-      addLog("All done!", "done");
+      setProgressState(tr.complete, 100);
+      addLog(tr.allDone, "done");
 
       // Save to history in background — best-effort, don't block the download
       try {
@@ -746,10 +824,10 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
       </div>
 
       {/* Phase */}
-      <div className="text-center">
+      <div className="text-center" aria-live="polite">
         <p className="font-semibold text-cosmos-star font-display text-lg">{phase}</p>
         {!isDone && !failed && (
-          <p className="text-sm text-cosmos-dust mt-1">Keep this page open while translating</p>
+          <p className="text-sm text-cosmos-dust mt-1">{t[lang].progress.keepOpen}</p>
         )}
       </div>
 
@@ -757,7 +835,7 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
       {!failed && <ProgressBar value={progress} showPercent={!isDone} />}
 
       {/* Log */}
-      <div className="max-h-32 overflow-y-auto text-xs space-y-0.5">
+      <div className="max-h-32 overflow-y-auto text-xs space-y-0.5" role="log">
         {log.map((entry, i) => (
           <div key={i} className={cn(
             "flex gap-2",
@@ -774,7 +852,7 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
       {isDone && downloadUrl && (
         <a href={downloadUrl} download={file.name.replace(/\.pdf$/i, "") + "_translated.pdf"}>
           <Button size="lg" className="gap-2 w-full">
-            <Download size={16} /> Download translated PDF
+            <Download size={16} /> {tr.downloadPdf}
           </Button>
         </a>
       )}

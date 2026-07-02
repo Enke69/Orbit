@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { TermSelectionModal } from "@/components/ui/TermSelectionModal";
 import { ArrowRight, Copy, Check, X, Wand2, Globe } from "lucide-react";
@@ -10,7 +10,11 @@ import { LANGUAGES, DEFAULT_LANGUAGE, getLanguageName } from "@/lib/languages";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 
-const MAX_CHARS = 5000;
+// Fallback until the plan-based limit loads; matches the FREE plan cap
+const DEFAULT_MAX_CHARS = 15_000;
+// Hard client ceiling even for unlimited plans — protects against silent
+// output truncation on extremely long single requests
+const HARD_MAX_CHARS = 50_000;
 
 function cleanupText(text: string): string {
   return text
@@ -33,13 +37,31 @@ export default function TextTranslatePage() {
   const [targetLanguage, setTargetLanguage] = useState(DEFAULT_LANGUAGE);
   const [detectedTerms, setDetectedTerms] = useState<string[]>([]);
   const [showTermModal, setShowTermModal] = useState(false);
+  const [maxChars, setMaxChars] = useState(DEFAULT_MAX_CHARS);
+  const [remaining, setRemaining] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Load the user's actual plan limits (char cap + remaining daily translations)
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/quota/text")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setMaxChars(data.maxChars === null ? HARD_MAX_CHARS : data.maxChars);
+        if (!data.isAdmin) {
+          setRemaining(Math.max(0, data.dailyLimit - data.usedToday));
+        }
+      })
+      .catch(() => { /* keep defaults */ });
+    return () => { cancelled = true; };
+  }, []);
 
   async function handleTranslate() {
     const text = input.trim();
     if (!text) return;
-    if (text.length > MAX_CHARS) {
-      toast.error(tr.tooLong(MAX_CHARS));
+    if (text.length > maxChars) {
+      toast.error(tr.tooLong(maxChars));
       return;
     }
 
@@ -110,6 +132,7 @@ export default function TextTranslatePage() {
       }
 
       const data = await res.json();
+      setRemaining((prev) => (prev !== null ? Math.max(0, prev - 1) : prev));
       const translated: (string | null)[] = data.translated ?? [];
       const result = lines
         .map((l, i) => {
@@ -157,7 +180,7 @@ export default function TextTranslatePage() {
   }
 
   const charCount = input.length;
-  const overLimit = charCount > MAX_CHARS;
+  const overLimit = charCount > maxChars;
 
   return (
     <>
@@ -201,7 +224,7 @@ export default function TextTranslatePage() {
               <span className="text-xs font-medium text-cosmos-dust/60 uppercase tracking-wider">{tr.source}</span>
               <div className="flex items-center gap-3">
                 <span className={cn("text-xs", overLimit ? "text-red-400" : "text-cosmos-dust/50")}>
-                  {charCount.toLocaleString()} / {MAX_CHARS.toLocaleString()}
+                  {charCount.toLocaleString()} / {maxChars.toLocaleString()}
                 </span>
                 {input && (
                   <>
@@ -277,7 +300,9 @@ export default function TextTranslatePage() {
           </Button>
         </div>
 
-        <p className="text-center text-xs text-cosmos-dust/40 mt-4">{tr.usageNote}</p>
+        <p className="text-center text-xs text-cosmos-dust/60 mt-4">
+          {remaining !== null ? tr.remainingToday(remaining) : tr.usageNote}
+        </p>
       </div>
     </>
   );

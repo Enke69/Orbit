@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getOpenAI, TRANSLATION_MODEL } from "@/lib/openai";
+import { getOpenAI, TRANSLATION_MODEL, formatGlossary, type GlossaryEntry } from "@/lib/openai";
+import { verifyPdfToken } from "@/lib/pdf-session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -11,11 +12,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { original, translated, targetLanguage = "Mongolian" } = (await req.json()) as {
+  const { original, translated, targetLanguage = "Mongolian", pdfToken, glossary } = (await req.json()) as {
     original: string[];
     translated: (string | null)[];
     targetLanguage: string;
+    pdfToken?: string;
+    glossary?: GlossaryEntry[];
   };
+
+  // Only the PDF pipeline uses this route; require its session token so the
+  // endpoint can't be scripted as a free translation API
+  if (!verifyPdfToken(pdfToken, session.user.id)) {
+    return NextResponse.json({ error: "Invalid or expired translation session" }, { status: 403 });
+  }
 
   if (!original?.length) return NextResponse.json({ lines: translated ?? [] });
 
@@ -47,7 +56,7 @@ Your job — return a corrected ${targetLanguage} translation for EVERY line:
 2. If CURR is [NOT TRANSLATED] or still contains English words: translate ORIG into ${targetLanguage}
 3. Use surrounding lines for full sentence context — sentences often split across adjacent lines
 4. Keep proper nouns, brand names, numbers, URLs, and code unchanged
-5. Ensure consistent terminology throughout the whole page
+5. Ensure consistent terminology throughout the whole page${formatGlossary(glossary)}
 
 OUTPUT FORMAT (mandatory):
 N|||corrected text

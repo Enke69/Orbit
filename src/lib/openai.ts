@@ -16,20 +16,30 @@ export const openai = new Proxy({} as OpenAI, {
   },
 });
 
-export const TRANSLATION_MODEL = "gpt-5.4-mini";
+// Override per environment to A/B test models without a deploy
+export const TRANSLATION_MODEL = process.env.TRANSLATION_MODEL ?? "gpt-5.4-mini";
 
-export const FREE_CHARS_PER_MONTH = 15_000;
-export const CHARS_PER_TOPUP_UNIT = 1_000;
-export const TOPUP_PRICE_CENTS = 10; // $0.10 per 1000 chars
-export const PRO_MONTHLY_PRICE_CENTS = 1000; // $10/mo
-export const PRO_MONTHLY_CHARS = 500_000;
+export interface GlossaryEntry {
+  source: string;
+  target: string;
+}
+
+// Renders a glossary block for injection into translation prompts.
+// Pinning exact renderings is the main defence against terminology drift
+// across chunks — especially important for agglutinative Mongolian.
+export function formatGlossary(glossary: GlossaryEntry[] | undefined): string {
+  if (!glossary?.length) return "";
+  const lines = glossary.map((g) => `- "${g.source}" → "${g.target}"`).join("\n");
+  return `\n\nGLOSSARY — use these EXACT renderings every time these terms appear (inflect only as grammar requires):\n${lines}`;
+}
 
 export function buildTranslationPrompt(
   textChunk: string,
   contextSummary: string,
   detectedLanguage: string,
   targetLanguage = "Mongolian",
-  translateTerms?: string[]
+  translateTerms?: string[],
+  glossary?: GlossaryEntry[]
 ): string {
   const termOverride = translateTerms?.length
     ? `\n9. OVERRIDE — translate these specific terms into ${targetLanguage} even if they would normally be kept as-is: ${translateTerms.join(", ")}`
@@ -46,7 +56,7 @@ RULES — follow exactly:
 9. Inline style markers wrap words that have special formatting: [U]...[/U] = underline, [B]...[/B] = bold, [I]...[/I] = italic, [C:RRGGBB]...[/C] = color. Translate the text INSIDE the markers and keep the markers tightly around the translated equivalent word(s). Never move, duplicate, nest, or remove these markers.
 6. Use the previously translated content in <context> to maintain consistent terminology.
 7. Output ONLY the translated text with preserved markers. No explanations, notes, or commentary.
-8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.${termOverride}
+8. Numbers, dates, and measurements: translate surrounding text but keep numerals and units as-is.${termOverride}${formatGlossary(glossary)}
 
 <context>
 ${contextSummary || "No previous context — this is the beginning of the document."}

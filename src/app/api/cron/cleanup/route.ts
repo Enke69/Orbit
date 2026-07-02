@@ -11,6 +11,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Mark orphaned jobs (client closed mid-translation, route timed out) as
+  // FAILED so they stop counting against the user's quota
+  const staleCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const { count: staleCount } = await prisma.translation.updateMany({
+    where: { status: { in: ["PENDING", "PROCESSING"] }, createdAt: { lt: staleCutoff } },
+    data: { status: "FAILED" },
+  });
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 7);
 
@@ -43,5 +51,5 @@ export async function GET(req: Request) {
   });
   deleted = count;
 
-  return NextResponse.json({ deleted, errors, cutoff });
+  return NextResponse.json({ deleted, staleMarkedFailed: staleCount, errors, cutoff });
 }

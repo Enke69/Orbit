@@ -5,6 +5,8 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Loader2, CheckCircle2, XCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 interface TranslationProgressProps {
   translationId: string;
@@ -15,12 +17,16 @@ interface TranslationProgressProps {
 
 type Phase = "translating" | "building" | "done" | "failed";
 
+const MAX_CHUNK_ATTEMPTS = 3;
+
 export function TranslationProgress({
   translationId,
   totalChunks,
   onComplete,
   onError,
 }: TranslationProgressProps) {
+  const { lang } = useLanguage();
+  const tr = t[lang].progress;
   const [phase, setPhase] = useState<Phase>("translating");
   const [chunksProcessed, setChunksProcessed] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -31,38 +37,60 @@ export function TranslationProgress({
     for (let i = 0; i < totalChunks; i++) {
       if (i === totalChunks - 1) setPhase("building");
 
-      try {
-        const res = await fetch("/api/translate/chunk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ translationId, chunkIndex: i }),
-        });
+      // Chunk calls are idempotent server-side (job state only persists on
+      // success), so transient failures are safe to retry with backoff.
+      let lastError: string = tr.networkError;
+      let succeeded = false;
 
-        const data = await res.json();
+      for (let attempt = 0; attempt < MAX_CHUNK_ATTEMPTS; attempt++) {
+        try {
+          const res = await fetch("/api/translate/chunk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ translationId, chunkIndex: i }),
+          });
 
-        if (!res.ok) {
-          setPhase("failed");
-          setErrorMsg(data.error ?? "Translation failed");
-          onError(data.error ?? "Translation failed");
-          return;
+          const data = await res.json();
+
+          if (!res.ok) {
+            lastError = data.error ?? tr.failed;
+            // Client errors (quota, invalid job) won't fix themselves — bail out
+            if (res.status < 500) {
+              setPhase("failed");
+              setErrorMsg(lastError);
+              onError(lastError);
+              return;
+            }
+            throw new Error(lastError);
+          }
+
+          setChunksProcessed(i + 1);
+
+          if (data.done) {
+            setPhase("done");
+            setDownloadUrl(data.downloadUrl);
+            onComplete(data.downloadUrl);
+            return;
+          }
+
+          succeeded = true;
+          break;
+        } catch (err) {
+          if (err instanceof Error && err.message) lastError = err.message;
+          if (attempt < MAX_CHUNK_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, 1500 * Math.pow(2, attempt)));
+          }
         }
+      }
 
-        setChunksProcessed(i + 1);
-
-        if (data.done) {
-          setPhase("done");
-          setDownloadUrl(data.downloadUrl);
-          onComplete(data.downloadUrl);
-          return;
-        }
-      } catch {
+      if (!succeeded) {
         setPhase("failed");
-        setErrorMsg("Network error during translation. Please try again.");
-        onError("Network error");
+        setErrorMsg(lastError);
+        onError(lastError);
         return;
       }
     }
-  }, [translationId, totalChunks, onComplete, onError]);
+  }, [translationId, totalChunks, onComplete, onError, tr]);
 
   useEffect(() => {
     if (processingRef.current) return;
@@ -80,10 +108,10 @@ export function TranslationProgress({
       : 10;
 
   const phaseLabel: Record<Phase, string> = {
-    translating: `Translating... (${chunksProcessed}/${totalChunks} sections)`,
-    building: "Rebuilding document...",
-    done: "Translation complete!",
-    failed: "Translation failed",
+    translating: tr.translating(chunksProcessed, totalChunks),
+    building: tr.building,
+    done: tr.done,
+    failed: tr.failed,
   };
 
   const isDone = phase === "done";
@@ -112,7 +140,7 @@ export function TranslationProgress({
       </div>
 
       {/* Label */}
-      <div>
+      <div aria-live="polite">
         <p className="font-semibold text-cosmos-star font-display text-lg">
           {phaseLabel[phase]}
         </p>
@@ -120,9 +148,7 @@ export function TranslationProgress({
           <p className="text-sm text-red-400 mt-1">{errorMsg}</p>
         )}
         {!isDone && !isFailed && (
-          <p className="text-sm text-cosmos-dust mt-1">
-            Please keep this page open while translating
-          </p>
+          <p className="text-sm text-cosmos-dust mt-1">{tr.keepOpen}</p>
         )}
       </div>
 
@@ -133,7 +159,7 @@ export function TranslationProgress({
       {isDone && downloadUrl && (
         <a href={downloadUrl} download>
           <Button size="lg" className="gap-2 w-full sm:w-auto">
-            <Download size={16} /> Download translated document
+            <Download size={16} /> {tr.download}
           </Button>
         </a>
       )}

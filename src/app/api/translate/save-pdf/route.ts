@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
-import { checkTranslationQuota } from "@/lib/quota";
+import { checkTranslationQuota, PLAN_LIMITS } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +51,15 @@ export async function POST(req: NextRequest) {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
+
+  // Guard against two parallel saves both passing the count check (TOCTOU)
+  if (!quota.isAdmin) {
+    const recheck = await checkTranslationQuota(userId);
+    if (recheck.dailyCount > PLAN_LIMITS[recheck.plan].daily) {
+      await prisma.translation.delete({ where: { id: translation.id } });
+      return NextResponse.json({ error: "Translation limit reached" }, { status: 402 });
+    }
+  }
 
   return NextResponse.json({ translationId: translation.id });
 }

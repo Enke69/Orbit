@@ -1,6 +1,9 @@
-import { openai, TRANSLATION_MODEL, buildTranslationPrompt } from "./openai";
+import { openai, TRANSLATION_MODEL, buildTranslationPrompt, type GlossaryEntry } from "./openai";
 
-const MAX_CHARS_PER_CHUNK = 3_000; // well within gpt-5.4-mini context
+// Larger chunks = fewer round-trips (faster, cheaper, more context per call).
+// Kept moderate so worst-case Cyrillic output still generates well inside the
+// route's 60s serverless limit.
+const MAX_CHARS_PER_CHUNK = 6_000;
 
 interface TranslationChunk {
   text: string;
@@ -60,9 +63,10 @@ export async function translateChunk(
   contextSummary: string,
   retries = 2,
   targetLanguage = "Mongolian",
-  translateTerms?: string[]
+  translateTerms?: string[],
+  glossary?: GlossaryEntry[]
 ): Promise<string> {
-  const prompt = buildTranslationPrompt(text, contextSummary, "auto-detect", targetLanguage, translateTerms);
+  const prompt = buildTranslationPrompt(text, contextSummary, "auto-detect", targetLanguage, translateTerms, glossary);
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -70,7 +74,9 @@ export async function translateChunk(
         model: TRANSLATION_MODEL,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
-        max_completion_tokens: 8192,
+        // Cyrillic output is token-heavy (~2 chars/token) — headroom prevents
+        // silent truncation on large chunks
+        max_completion_tokens: 16384,
       });
 
       if (response.choices[0]?.finish_reason === "length") {
@@ -87,6 +93,60 @@ export async function translateChunk(
   }
 
   return text;
+}
+
+// Extract key term pairs from the first translated chunk so later chunks
+// (and the PDF cleanup pass) can reuse the exact same renderings.
+export async function extractGlossary(
+  sourceText: string,
+  translatedText: string,
+  targetLanguage: string
+): Promise<GlossaryEntry[]> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: TRANSLATION_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: `Below is a source text and its ${targetLanguage} translation. Extract up to 15 key recurring terms (domain terminology, important nouns/phrases likely to reappear later in the document) and the exact ${targetLanguage} rendering used.
+
+Return ONLY a valid JSON array, no markdown:
+[{"source": "term in source language", "target": "rendering used in the translation"}, ...]
+
+Rules: only terms that actually appear in BOTH texts; skip proper nouns kept untranslated; skip common everyday words.
+
+<source>
+${sourceText.slice(0, 4000)}
+</source>
+
+<translation>
+${translatedText.slice(0, 4000)}
+</translation>`,
+        },
+      ],
+      temperature: 0,
+      max_completion_tokens: 800,
+    });
+
+    const raw = response.choices[0]?.message?.content?.trim() ?? "[]";
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    const parsed: unknown = JSON.parse(match[0]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (e): e is GlossaryEntry =>
+          typeof e === "object" && e !== null &&
+          typeof (e as GlossaryEntry).source === "string" &&
+          typeof (e as GlossaryEntry).target === "string" &&
+          (e as GlossaryEntry).source.trim().length > 0 &&
+          (e as GlossaryEntry).target.trim().length > 0
+      )
+      .slice(0, 15);
+  } catch {
+    // Glossary is a quality enhancement — never fail the translation over it
+    return [];
+  }
 }
 
 export function buildContextSummary(latestTranslation: string, previousContext: string): string {

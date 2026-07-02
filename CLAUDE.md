@@ -28,15 +28,18 @@ Admins get infinite translation credits — set via `ADMIN_EMAILS` (comma-separa
 
 ## Architecture
 
-**Stack**: Next.js 14 App Router · TypeScript · Tailwind CSS · NextAuth v5 · Prisma + Supabase PostgreSQL · Supabase Storage · OpenAI · Resend email
+**Stack**: Next.js 14 App Router · TypeScript · Tailwind CSS · NextAuth v5 · Prisma + Supabase PostgreSQL · Supabase Storage · OpenAI
 
 ### Route Groups
 - `(app)/` — authenticated pages (home, translate, text, history, dashboard, privacy, terms). Protected by middleware via session cookie check.
-- `(auth)/` — public auth pages (signin, signup, verify-request, auth-error)
+- `(auth)/` — public auth pages (signin, auth-error)
 - `api/` — all backend logic
 
 ### Internationalisation (`src/lib/i18n.ts` + `src/contexts/LanguageContext.tsx`)
-Two languages: English (`en`) and Mongolian (`mn`). User preference stored in `localStorage` and a `orbit-lang` cookie. `LanguageProvider` wraps the root layout; `useLanguage()` hook exposes `{ lang, toggle }`. All UI strings for the home page, Navbar, Footer, Privacy, and Terms live in `src/lib/i18n.ts`. The toggle button is in the Navbar (flag emoji + two-letter code).
+Two languages: Mongolian (`mn`, **default**) and English (`en`). User preference stored in `localStorage` and a `orbit-lang` cookie. `LanguageProvider` wraps the root layout; `useLanguage()` hook exposes `{ lang, toggle }`. ALL UI strings live in `src/lib/i18n.ts` — including the uploader, term modal, progress components, PDF pipeline log messages, and signin page. The toggle button is in the Navbar (flag emoji + two-letter code).
+
+### Fonts (`src/app/layout.tsx`)
+Loaded via `next/font/google` with **Cyrillic subsets**: Inter (`--font-inter`, body) and Manrope (`--font-display`, headings). Do not add fonts via CSS `@import`, and any display font must include a Cyrillic subset — Mongolian headings silently fall back to system-ui otherwise.
 
 ### Layout (`src/components/layout/`)
 - `Navbar.tsx` — fixed top bar; desktop nav links + mobile bottom nav. Active state via `usePathname()`. Language toggle + user dropdown with outside-click close.
@@ -52,20 +55,22 @@ The NextAuth route handler (`api/auth/[...nextauth]/route.ts`) uses dynamic impo
 ### Translation — Two Separate Pipelines
 
 **PDF files → client-side canvas pipeline** (`src/components/sections/PdfTranslatorClient.tsx`):
-1. Loads PDF.js 3.11.174 from CDN (3-CDN fallback: jsdelivr → cdnjs → unpkg) in the browser
-2. Renders each page to a `<canvas>` at 2× scale — preserves images, graphics, tables visually
-3. Extracts text items with canvas-space coordinates; groups into lines via `groupIntoLines()`
-4. Detects table rows via x-alignment + gap heuristics (`detectTableLines()`) and drawn rectangle borders from the PDF operator list — these lines are skipped for translation
-5. Calls `POST /api/translate/text` in chunks (~1000 chars), receives translated lines back
-6. Short null-translated fragments (≤15 chars, ≤2 words, non-Cyrillic) get an erase-only `""` sentinel — original text is covered but no replacement is drawn
-7. After all chunks, a quality-check pass calls `POST /api/translate/cleanup` with `{original, translated}` pairs for the whole page — GPT fixes cut sentences and untranslated fragments with full context
-8. Assembles final PDF from JPEG canvas snapshots using `pdf-lib` (npm, client-side)
-9. Calls `POST /api/translate/save-pdf` to upload the result and create a history DB record
+1. Calls `POST /api/translate/start-pdf` first — checks document quota **up front** and returns a short-lived HMAC session token (`src/lib/pdf-session.ts`); this token must accompany every internal text/cleanup/glossary call
+2. Loads PDF.js 3.11.174 from CDN (3-CDN fallback: jsdelivr → cdnjs → unpkg) in the browser
+3. Renders each page to a `<canvas>` at 2× scale — preserves images, graphics, tables visually
+4. Extracts text items with canvas-space coordinates; groups into lines via `groupIntoLines()`
+5. Detects table rows via x-alignment + gap heuristics (`detectTableLines()`) and drawn rectangle borders from the PDF operator list — these lines are skipped for translation
+6. Calls `POST /api/translate/text` in chunks (~2500 chars) with `internal: true` + `pdfToken`; each chunk call retries up to 3× with backoff (402/403 are not retried)
+7. Short null-translated fragments (≤15 chars, ≤2 words) get an erase-only `""` sentinel — original text is covered but no replacement is drawn. The "already in target script" skip heuristic only applies when the target language uses Cyrillic (`targetUsesCyrillic()`)
+8. After all chunks, a quality-check pass calls `POST /api/translate/cleanup` — GPT fixes cut sentences and untranslated fragments with full page context
+9. After page 1, `POST /api/translate/glossary` extracts term renderings; the glossary is passed to every later text/cleanup call for terminology consistency
+10. Assembles final PDF from JPEG canvas snapshots using `pdf-lib` (npm, client-side)
+11. Calls `POST /api/translate/save-pdf` to upload the result and create a history DB record
 
 **DOCX/DOC files → server-side chunked pipeline**:
-1. `POST /api/translate` — extracts text, splits into ~3000-char chunks, saves a job JSON to Supabase Storage, creates a `Translation` DB record, returns `{translationId, totalChunks}`
-2. Client (`TranslationProgress.tsx`) calls `POST /api/translate/chunk` once per chunk sequentially
-3. Each chunk call reads the job JSON, translates via OpenAI, writes progress back to storage
+1. `POST /api/translate` — extracts text, splits into ~6000-char chunks, saves a job JSON to Supabase Storage, creates a `Translation` DB record, returns `{translationId, totalChunks}`. After creating the row it re-checks quota and rolls back if a parallel request over-committed (TOCTOU guard).
+2. Client (`TranslationProgress.tsx`) calls `POST /api/translate/chunk` once per chunk sequentially, retrying each chunk up to 3× with backoff (safe — job state only persists on success; 4xx errors are not retried)
+3. Each chunk call reads the job JSON, translates via OpenAI, writes progress back to storage. After chunk 0, `extractGlossary()` stores term renderings in the job JSON; later chunks inject them into the prompt. Structural markers (`[BLOCK_N]` etc.) are counted before/after — a mismatch triggers one retry.
 4. On the final chunk, the route rebuilds the DOCX (or PDF) and uploads it to Supabase Storage
 5. Job state lives in a JSON file in Supabase Storage — the `errorMessage` DB column temporarily stores the job file path
 
@@ -75,13 +80,18 @@ The NextAuth route handler (`api/auth/[...nextauth]/route.ts`) uses dynamic impo
 Before translation starts, the user is shown a modal (`src/components/ui/TermSelectionModal.tsx`) with up to 15 detected technical/domain-specific terms:
 - PDF pages: first 3 pages extracted client-side via PDF.js, sent to `POST /api/translate/detect-terms`
 - DOCX files: text extracted server-side via mammoth, sent to `POST /api/translate/scan`
-- 15-second countdown auto-confirms. Selected terms are passed as `translateTerms[]` through all pipelines and added as a rule override in the translation system prompt.
+- The modal waits for the user (no auto-countdown); it's a proper `role="dialog"` with focus trap and Escape-to-skip. Selected terms are passed as `translateTerms[]` through all pipelines and added as a rule override in the translation system prompt.
 
 ### Translation API (`POST /api/translate/text`)
-Accepts `{ lines: string[], contextSummary?: string, targetLanguage?: string, sourceLanguage?: string, translateTerms?: string[] }`. Uses `N|||text` format: sends numbered lines, parses `N|||translated` response. Returns null for lines where translation equals source (unchanged). Checks auth but does **not** count against the plan translation quota (text-to-text is unbounded; only document translations are counted).
+Accepts `{ lines: string[], contextSummary?, targetLanguage?, translateTerms?, internal?, pdfToken?, glossary? }`. Uses `N|||text` format: sends numbered lines, parses `N|||translated` response. Returns null for lines where translation equals source (unchanged).
+- **Non-internal calls** (text page): gated by `checkTextQuota()` and record a `TextUsage` row.
+- **Internal calls** (PDF pipeline, `internal: true`): bypass the text quota but **require a valid `pdfToken`** from `/api/translate/start-pdf` — returns 403 otherwise. Never trust `internal` without the token; it would be a free unlimited-translation bypass.
 
 ### Quality-Check API (`POST /api/translate/cleanup`)
-Accepts `{ original: string[], translated: (string|null)[], targetLanguage }`. Sends combined `N|||ORIG: ...|||CURR: ...` format to GPT. Returns corrected lines — fixes cut sentences, translates `[NOT TRANSLATED]` fragments using full page context. Falls back to original translations on error.
+Accepts `{ original: string[], translated: (string|null)[], targetLanguage, pdfToken, glossary? }`. Requires a valid `pdfToken`. Sends combined `N|||ORIG: ...|||CURR: ...` format to GPT. Returns corrected lines — fixes cut sentences, translates `[NOT TRANSLATED]` fragments using full page context. Falls back to original translations on error.
+
+### Glossary Layer (terminology consistency)
+`extractGlossary(source, translated, targetLang)` in `src/lib/translator.ts` pulls up to 15 term pairs from the first translated chunk/page. `formatGlossary()` in `src/lib/openai.ts` renders them into every subsequent prompt ("use these EXACT renderings"). DOCX: stored in the job JSON after chunk 0. PDF: fetched via `POST /api/translate/glossary` after page 1, kept client-side. This is the main defence against terminology drift across chunks — important for agglutinative Mongolian.
 
 ### Language Support (`src/lib/languages.ts`)
 22 supported target languages. `getLanguageName(code)` maps code → full name passed to the API. Both the document translate page and text page have target language selectors. Source language defaults to auto-detect. System prompts are built dynamically — never hardcoded to Mongolian.
@@ -93,25 +103,26 @@ Accepts `{ original: string[], translated: (string|null)[], targetLanguage }`. S
 - **DOCX read**: `mammoth`. **DOCX write**: `docx` library. Both use `[BLOCK_N]` markers.
 
 ### OpenAI (`src/lib/openai.ts`)
-Model: `gpt-5.4-mini`. Uses `max_completion_tokens` (not `max_tokens`). The `openai` export is a Proxy singleton — initializes lazily to avoid build-time crashes. `buildTranslationPrompt(text, context, sourceLang, targetLang, translateTerms?)` builds the system prompt dynamically.
+Model: `gpt-5.4-mini` by default, overridable per environment via the `TRANSLATION_MODEL` env var (enables A/B testing without a deploy). Uses `max_completion_tokens` (not `max_tokens`) — set to 16384 on translation calls because Cyrillic output is token-heavy (~2 chars/token). The `openai` export is a Proxy singleton — initializes lazily to avoid build-time crashes. `buildTranslationPrompt(text, context, sourceLang, targetLang, translateTerms?, glossary?)` builds the system prompt dynamically.
 
 ### Storage (`src/lib/storage.ts`)
 All files go to the `translations` Supabase Storage bucket. Paths: `{userId}/{timestamp}_{filename}`. Job JSONs: `{userId}/jobs/{timestamp}_job.json`. Signed URLs expire in 1 hour. Supabase free tier: 1 GB file storage.
 
 ### Scheduled Cleanup (`vercel.json` + `src/app/api/cron/cleanup/route.ts`)
-Vercel cron fires daily at 3 AM UTC. Deletes storage files (original, translated, job JSON) then removes DB records older than 7 days. Protected by `CRON_SECRET` header check.
+Vercel cron fires daily at 3 AM UTC. First marks PENDING/PROCESSING jobs older than 2 h as FAILED (orphan sweep — frees quota), then deletes storage files (original, translated, job JSON) and removes DB records older than 7 days. Protected by `CRON_SECRET` header check.
 
 ### Subscription Plans & Quota (`src/lib/quota.ts`)
-Three plans stored in `User.plan` (Prisma enum: `FREE | MONTHLY | VIP`). `User.planExpiresAt` — if set and in the past, the plan is treated as FREE automatically.
+Four plans stored in `User.plan` (Prisma enum: `FREE | WEEKLY | MONTHLY | VIP`). `User.planExpiresAt` — if set and in the past, the plan is treated as FREE automatically.
 
-| Plan    | Daily limit | Monthly limit | History |
-|---------|-------------|---------------|---------|
-| FREE    | 1 / 24 h    | —             | last 3  |
-| MONTHLY | 3 / day     | 75 / month    | 7 days  |
-| VIP     | 100 / day   | —             | 30 days |
-| Admin   | unlimited   | —             | all     |
+| Plan    | Daily | Weekly | Monthly | History  | Text/day | Text chars |
+|---------|-------|--------|---------|----------|----------|------------|
+| FREE    | 1     | —      | —       | last 3   | 3        | 15,000     |
+| WEEKLY  | 3     | 20     | —       | 7 days   | 5        | 15,000     |
+| MONTHLY | 5     | —      | 75      | 30 days  | 10       | 20,000     |
+| VIP     | 100   | —      | —       | 180 days | 100      | unlimited  |
+| Admin   | unlimited | —  | —       | all      | unlimited | unlimited |
 
-`checkTranslationQuota(userId)` counts `Translation` rows created within the relevant window and returns `{ allowed, plan, error? }`. Called at the top of `POST /api/translate` (DOCX/server pipeline) and `POST /api/translate/save-pdf` (PDF/client pipeline). Admins (matched by `ADMIN_EMAILS` env var) bypass all limits. `NEXT_PUBLIC_ADMIN_EMAILS` is the same value exposed to the client for UI-only checks (Navbar admin link).
+`checkTranslationQuota(userId)` counts non-FAILED `Translation` rows within the relevant windows (**failed jobs don't consume quota**). Called at `POST /api/translate` (DOCX pipeline), `POST /api/translate/start-pdf` (PDF pipeline, before any spend) and `POST /api/translate/save-pdf`. Both creation routes re-check after insert and roll back on TOCTOU over-commit. `checkTextQuota()`/`recordTextUsage()` gate the text page; `GET /api/quota/text` exposes the user's limits to the client (the text page reads its char cap from there — never hardcode it). Admins (matched by `ADMIN_EMAILS` env var) bypass all limits. `NEXT_PUBLIC_ADMIN_EMAILS` is the same value exposed to the client for UI-only checks (Navbar admin link).
 
 Subscriptions are assigned manually via the admin panel (`/admin`) — bank transfer workflow, no automated payment processing. QPay integration is stubbed in `src/lib/payment.ts` for future use.
 

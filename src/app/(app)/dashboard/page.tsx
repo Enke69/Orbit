@@ -18,10 +18,12 @@ export default async function DashboardPage() {
   const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
   const isAdmin = adminEmails.includes(session.user.email ?? "");
 
+  // Match quota.ts: failed translations don't count against limits
+  const notFailed = { not: "FAILED" as const };
   const [{ plan, planExpiresAt }, dailyCount, monthlyCount, recentTranslations] = await Promise.all([
     getEffectivePlan(userId),
-    prisma.translation.count({ where: { userId, createdAt: { gte: since24h } } }),
-    prisma.translation.count({ where: { userId, createdAt: { gte: startOfMonth } } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: since24h }, status: notFailed } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: startOfMonth }, status: notFailed } }),
     prisma.translation.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },

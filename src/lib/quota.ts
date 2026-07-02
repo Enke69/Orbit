@@ -66,10 +66,12 @@ export async function checkTranslationQuota(userId: string): Promise<{
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
+  // Failed translations don't count against quota — the user got nothing
+  const notFailed = { not: "FAILED" as const };
   const [dailyCount, weeklyCount, monthlyCount] = await Promise.all([
-    prisma.translation.count({ where: { userId, createdAt: { gte: since24h } } }),
-    prisma.translation.count({ where: { userId, createdAt: { gte: since7d  } } }),
-    prisma.translation.count({ where: { userId, createdAt: { gte: startOfMonth } } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: since24h }, status: notFailed } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: since7d  }, status: notFailed } }),
+    prisma.translation.count({ where: { userId, createdAt: { gte: startOfMonth }, status: notFailed } }),
   ]);
 
   if (dailyCount >= limits.daily) {

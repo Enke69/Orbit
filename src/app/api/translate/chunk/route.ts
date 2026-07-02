@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile, downloadFile } from "@/lib/storage";
-import { translateChunk, buildContextSummary } from "@/lib/translator";
+import { translateChunk, buildContextSummary, extractGlossary } from "@/lib/translator";
+import type { GlossaryEntry } from "@/lib/openai";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +19,16 @@ interface JobData {
   lang: string;
   targetLanguage: string;
   translateTerms?: string[];
+  glossary?: GlossaryEntry[];
+}
+
+// Structural markers the model must echo back verbatim. A missing marker
+// means that block silently keeps its original (untranslated) text, so a
+// mismatch is worth one retry.
+const MARKER_RE = /\[(?:BLOCK_\d+|TABLE_\d+(?:_ROW_\d+_COL_\d+)?|IMG_\d+|CODE_\d+)\]/g;
+
+function countMarkers(text: string): number {
+  return text.match(MARKER_RE)?.length ?? 0;
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +62,22 @@ export async function POST(req: NextRequest) {
 
   // Translate this chunk
   const chunkText = job.chunks[chunkIndex].text;
-  const translated = await translateChunk(chunkText, job.contextSummary, 2, job.targetLanguage ?? "Mongolian", job.translateTerms);
+  const targetLanguage = job.targetLanguage ?? "Mongolian";
+  let translated = await translateChunk(chunkText, job.contextSummary, 2, targetLanguage, job.translateTerms, job.glossary);
+
+  // Marker validation: if the model dropped structural markers, that content
+  // would silently stay untranslated in the output — retry once
+  const expectedMarkers = countMarkers(chunkText);
+  if (expectedMarkers > 0 && countMarkers(translated) < expectedMarkers) {
+    const retried = await translateChunk(chunkText, job.contextSummary, 1, targetLanguage, job.translateTerms, job.glossary);
+    if (countMarkers(retried) > countMarkers(translated)) translated = retried;
+  }
+
+  // After the first chunk, extract a glossary of term renderings so every
+  // later chunk uses consistent terminology
+  if (chunkIndex === 0 && totalChunks > 1 && !job.glossary) {
+    job.glossary = await extractGlossary(chunkText, translated, targetLanguage);
+  }
 
   // Update job data with translated chunk and new context
   job.translatedChunks[chunkIndex] = translated;

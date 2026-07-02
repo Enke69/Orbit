@@ -20,7 +20,7 @@ const PdfTranslatorClient = dynamic(
 );
 
 type OutputFormat = "docx" | "pdf";
-type Stage = "upload" | "translating" | "done";
+type Stage = "upload" | "translating" | "done" | "failed";
 
 function isPdf(file: File) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -98,6 +98,7 @@ export default function TranslatePage() {
   const [detectedTerms, setDetectedTerms] = useState<string[]>([]);
   const [showTermModal, setShowTermModal] = useState(false);
   const [translateTerms, setTranslateTerms] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handleTranslate() {
     if (!file) return;
@@ -180,9 +181,15 @@ export default function TranslatePage() {
 
   function handleError(message: string) {
     toast.error(message);
-    setStage("upload");
+    setErrorMsg(message);
+    setStage("failed");
     setLoading(false);
     setTranslationId(null);
+  }
+
+  function handleRetry() {
+    setErrorMsg(null);
+    startTranslation(translateTerms);
   }
 
   function reset() {
@@ -193,6 +200,7 @@ export default function TranslatePage() {
     setTranslationId(null);
     setDownloadUrl(null);
     setTranslateTerms([]);
+    setErrorMsg(null);
   }
 
   return (
@@ -295,6 +303,27 @@ export default function TranslatePage() {
             onComplete={handleComplete}
             onError={handleError}
           />
+        )}
+
+        {stage === "failed" && (
+          <div className="glass-card rounded-2xl p-8 text-center space-y-5">
+            <div className="w-16 h-16 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center mx-auto">
+              <ArrowRight size={28} className="text-red-400 rotate-180" />
+            </div>
+            <div>
+              <p className="font-display font-semibold text-lg text-cosmos-star">{tr.failedTitle}</p>
+              {errorMsg && <p className="text-sm text-red-400 mt-1">{errorMsg}</p>}
+              <p className="text-xs text-cosmos-dust/60 mt-2">{tr.failedSub}</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button size="lg" onClick={handleRetry} className="gap-2">
+                {tr.retry}
+              </Button>
+              <Button variant="outline" size="lg" onClick={reset}>
+                {tr.translateAnother}
+              </Button>
+            </div>
+          </div>
         )}
 
         {stage === "done" && (

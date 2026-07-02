@@ -6,7 +6,7 @@ import { isAllowedFileType } from "@/lib/utils";
 import { extractDocx } from "@/lib/docx-processor";
 import { extractPdf } from "@/lib/pdf-processor";
 import { chunkTranslatableText, detectLanguage } from "@/lib/translator";
-import { checkTranslationQuota } from "@/lib/quota";
+import { checkTranslationQuota, PLAN_LIMITS } from "@/lib/quota";
 import { addDays } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +95,16 @@ export async function POST(req: NextRequest) {
       errorMessage: jobPath,
     },
   });
+
+  // Re-check quota after creating the row: two parallel uploads can both pass
+  // the count-based check above (TOCTOU). If we're now over, roll back.
+  if (!quota.isAdmin) {
+    const recheck = await checkTranslationQuota(userId);
+    if (recheck.dailyCount > PLAN_LIMITS[recheck.plan].daily) {
+      await prisma.translation.delete({ where: { id: translation.id } });
+      return NextResponse.json({ error: "Translation limit reached" }, { status: 402 });
+    }
+  }
 
   return NextResponse.json({
     translationId: translation.id,
