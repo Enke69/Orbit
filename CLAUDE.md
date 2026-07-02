@@ -60,12 +60,13 @@ The NextAuth route handler (`api/auth/[...nextauth]/route.ts`) uses dynamic impo
 3. Renders each page to a `<canvas>` at 2× scale — preserves images, graphics, tables visually
 4. Extracts text items with canvas-space coordinates; groups into lines via `groupIntoLines()`
 5. Detects table rows via x-alignment + gap heuristics (`detectTableLines()`) and drawn rectangle borders from the PDF operator list — these lines are skipped for translation
-6. Calls `POST /api/translate/text` in chunks (~2500 chars) with `internal: true` + `pdfToken`; each chunk call retries up to 3× with backoff (402/403 are not retried)
-7. Short null-translated fragments (≤15 chars, ≤2 words) get an erase-only `""` sentinel — original text is covered but no replacement is drawn. The "already in target script" skip heuristic only applies when the target language uses Cyrillic (`targetUsesCyrillic()`)
-8. After all chunks, a quality-check pass calls `POST /api/translate/cleanup` — GPT fixes cut sentences and untranslated fragments with full page context
-9. After page 1, `POST /api/translate/glossary` extracts term renderings; the glossary is passed to every later text/cleanup call for terminology consistency
-10. Assembles final PDF from JPEG canvas snapshots using `pdf-lib` (npm, client-side)
-11. Calls `POST /api/translate/save-pdf` to upload the result and create a history DB record
+6. **Groups lines into paragraphs** (`groupIntoParagraphs()`: vertical adjacency + same font size + column overlap; hyphenated words reconnected by `joinLineTexts()`). Translation happens at paragraph level, so the model always sees whole sentences — this replaced the old line-by-line + full-page cleanup double-pass (≈half the API cost)
+7. Calls `POST /api/translate/text` in chunks (~2500 chars of paragraphs) with `internal: true` + `pdfToken`; each chunk call retries up to 3× with backoff (402/403 are not retried)
+8. Short null-translated fragments (≤15 chars, ≤2 words) get an erase-only `""` sentinel — original text is covered but no replacement is drawn. The "already in target script" skip heuristic only applies when the target language uses Cyrillic (`targetUsesCyrillic()`)
+9. After page 1, `POST /api/translate/glossary` extracts term renderings; the glossary is passed to every later call for terminology consistency
+10. `drawTranslatedPage()` covers each paragraph's bounding box with the sampled background colour and redraws the translated text as a wrapped block, shrinking the font (down to 0.6×) until it fits the available height
+11. Assembles final PDF from JPEG canvas snapshots using `pdf-lib` (npm, client-side)
+12. Calls `POST /api/translate/save-pdf` to upload the result and create a history DB record
 
 **DOCX/DOC files → server-side chunked pipeline**:
 1. `POST /api/translate` — extracts text, splits into ~6000-char chunks, saves a job JSON to Supabase Storage, creates a `Translation` DB record, returns `{translationId, totalChunks}`. After creating the row it re-checks quota and rolls back if a parallel request over-committed (TOCTOU guard).
@@ -87,9 +88,6 @@ Accepts `{ lines: string[], contextSummary?, targetLanguage?, translateTerms?, i
 - **Non-internal calls** (text page): gated by `checkTextQuota()` and record a `TextUsage` row.
 - **Internal calls** (PDF pipeline, `internal: true`): bypass the text quota but **require a valid `pdfToken`** from `/api/translate/start-pdf` — returns 403 otherwise. Never trust `internal` without the token; it would be a free unlimited-translation bypass.
 
-### Quality-Check API (`POST /api/translate/cleanup`)
-Accepts `{ original: string[], translated: (string|null)[], targetLanguage, pdfToken, glossary? }`. Requires a valid `pdfToken`. Sends combined `N|||ORIG: ...|||CURR: ...` format to GPT. Returns corrected lines — fixes cut sentences, translates `[NOT TRANSLATED]` fragments using full page context. Falls back to original translations on error.
-
 ### Glossary Layer (terminology consistency)
 `extractGlossary(source, translated, targetLang)` in `src/lib/translator.ts` pulls up to 15 term pairs from the first translated chunk/page. `formatGlossary()` in `src/lib/openai.ts` renders them into every subsequent prompt ("use these EXACT renderings"). DOCX: stored in the job JSON after chunk 0. PDF: fetched via `POST /api/translate/glossary` after page 1, kept client-side. This is the main defence against terminology drift across chunks — important for agglutinative Mongolian.
 
@@ -101,6 +99,7 @@ Accepts `{ original: string[], translated: (string|null)[], targetLanguage, pdfT
 - **PDF (client-side, canvas pipeline)**: PDF.js in browser. No server-side PDF reading.
 - **PDF write**: `pdf-lib` + `@pdf-lib/fontkit`. Noto Sans Cyrillic embedded as base64 in `src/lib/noto-sans-b64.ts` — avoids filesystem issues on Vercel (public/ is CDN-only).
 - **DOCX read**: `mammoth`. **DOCX write**: `docx` library. Both use `[BLOCK_N]` markers.
+- **DOCX images**: mammoth emits data-URI `<img>` tags (often wrapped in `<p>`); `parseHtmlToBlocks()` lifts them into image blocks with base64 payloads, and `buildDocx()` re-embeds them via `ImageRun` (dimensions parsed from PNG/JPEG/GIF headers, scaled to ≤550px width). Image payloads are stripped from the job JSON — the rebuild re-extracts the original file.
 
 ### OpenAI (`src/lib/openai.ts`)
 Model: `gpt-5.4-mini` by default, overridable per environment via the `TRANSLATION_MODEL` env var (enables A/B testing without a deploy). Uses `max_completion_tokens` (not `max_tokens`) — set to 16384 on translation calls because Cyrillic output is token-heavy (~2 chars/token). The `openai` export is a Proxy singleton — initializes lazily to avoid build-time crashes. `buildTranslationPrompt(text, context, sourceLang, targetLang, translateTerms?, glossary?)` builds the system prompt dynamically.
@@ -128,6 +127,9 @@ Subscriptions are assigned manually via the admin panel (`/admin`) — bank tran
 
 ### Admin Panel (`/admin` + `src/components/sections/AdminView.tsx`)
 Server component fetches all users; client component renders plan assignment UI. Protected by `ADMIN_EMAILS` check — redirects non-admins to `/dashboard`. `POST /api/admin/set-plan` updates `User.plan` and `User.planExpiresAt`.
+
+### Design System
+Two glow effects only: `shadow-cosmic` (ambient) and `shadow-nebula` (focused highlight) — don't add more gradient/glow utilities. Brand accent: the хээ (alkhan khee) Mongolian meander ornament via `.khee-divider` (horizontal strip) and `.khee-top` (card top accent, needs extra top padding), both defined in `globals.css` as inline SVG backgrounds.
 
 ### Background (`src/components/ui/StarBackground.tsx`)
 CSS `box-shadow` star field — 3 tiers (180×1px, 60×2px, 25×3px) with dual-panel seamless vertical drift. Generated in `useEffect` to avoid SSR hydration mismatch. Asteroid divs use `orbit-asteroid` keyframe. Respects `prefers-reduced-motion`.

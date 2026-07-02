@@ -98,19 +98,84 @@ function groupIntoLines(items: TextItem[]): Line[] {
   return lines;
 }
 
-function reconnectHyphens(lines: Line[]) {
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line = lines[i];
-    if (!line.items.length) continue;
-    const last = line.items[line.items.length - 1] as TextItem & { _hyphenContinues?: boolean };
-    if (last.str.endsWith("-") && last.str.length > 1) {
-      const nextFirst = lines[i + 1].items[0] as TextItem & { _hyphenContinued?: boolean };
-      if (nextFirst && /^[a-zA-ZА-Яа-я]/i.test(nextFirst.str)) {
-        last._hyphenContinues = true;
-        nextFirst._hyphenContinued = true;
-      }
+// ─── Paragraph grouping ───────────────────────────────────────────────────────
+// Translating whole paragraphs (instead of visual lines) gives the model full
+// sentences — the line-level approach chopped sentences mid-way and needed an
+// expensive second cleanup pass to repair them.
+
+interface Para {
+  text: string;
+  lineIdxs: number[];
+  _idx: number;
+}
+
+function lineAvgFs(line: Line): number {
+  if (!line.items.length) return 12;
+  return line.items.reduce((s, it) => s + (it.fontSize > 0 ? it.fontSize : 12), 0) / line.items.length;
+}
+
+function lineXRange(line: Line): [number, number] {
+  let minX = Infinity, maxX = -Infinity;
+  for (const it of line.items) {
+    minX = Math.min(minX, it.cx);
+    maxX = Math.max(maxX, it.cx + Math.max(it.width, 4));
+  }
+  return [minX, maxX];
+}
+
+// Join line fragments into flowing text, reconnecting hyphenated words
+function joinLineTexts(texts: string[]): string {
+  let out = "";
+  for (const t of texts) {
+    const tt = t.trim();
+    if (!tt) continue;
+    if (out.endsWith("-") && out.length > 1 && /^[a-zа-яё]/i.test(tt)) {
+      out = out.slice(0, -1) + tt;
+    } else {
+      out = out ? out + " " + tt : tt;
     }
   }
+  return out;
+}
+
+// Consecutive translatable lines merge into a paragraph when they are
+// vertically adjacent, share a font size (≈ same style), and overlap
+// horizontally (same column). Headings, table rows, and column changes
+// naturally break paragraphs.
+function groupIntoParagraphs(lines: Line[], lineTexts: LineText[], skipSet: Set<number>): Para[] {
+  const paras: Para[] = [];
+  let current: number[] = [];
+
+  const flush = () => {
+    if (current.length) {
+      const text = joinLineTexts(current.map((i) => lineTexts[i].text));
+      if (text.trim()) paras.push({ text, lineIdxs: [...current], _idx: paras.length });
+    }
+    current = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const translatable = !skipSet.has(i) && lineTexts[i].text.trim().length > 0;
+    if (!translatable) { flush(); continue; }
+    if (!current.length) { current.push(i); continue; }
+
+    const prev = current[current.length - 1];
+    const fsPrev = lineAvgFs(lines[prev]);
+    const fsCur = lineAvgFs(lines[i]);
+    const gap = lines[i].anchorY - lines[prev].anchorY;
+    const [pMin, pMax] = lineXRange(lines[prev]);
+    const [cMin, cMax] = lineXRange(lines[i]);
+    const xOverlap = Math.min(pMax, cMax) - Math.max(pMin, cMin);
+
+    const sameStyle = Math.abs(fsCur - fsPrev) <= Math.max(fsCur, fsPrev) * 0.25;
+    const closeVert = gap > 0 && gap <= Math.max(fsCur, fsPrev) * 1.8;
+    const sameColumn = xOverlap > Math.min(pMax - pMin, cMax - cMin) * 0.3;
+
+    if (sameStyle && closeVert && sameColumn) current.push(i);
+    else { flush(); current.push(i); }
+  }
+  flush();
+  return paras;
 }
 
 function assembleLineText(line: Line): { text: string; line: Line; _idx: number } {
@@ -149,18 +214,18 @@ function targetUsesCyrillic(targetLanguage: string): boolean {
   return /mongolian|russian|ukrainian|bulgarian|serbian|kazakh/i.test(targetLanguage);
 }
 
-function makeChunks(lineTexts: LineText[], maxChars: number): LineText[][] {
-  const chunks: LineText[][] = [];
-  let current: LineText[] = [];
+function makeChunks<T extends { text: string }>(items: T[], maxChars: number): T[][] {
+  const chunks: T[][] = [];
+  let current: T[] = [];
   let length = 0;
-  for (const lt of lineTexts) {
-    const len = lt.text.length + 1;
+  for (const it of items) {
+    const len = it.text.length + 1;
     if (length + len > maxChars && current.length > 0) {
       chunks.push(current);
-      current = [lt];
+      current = [it];
       length = len;
     } else {
-      current.push(lt);
+      current.push(it);
       length += len;
     }
   }
@@ -303,10 +368,9 @@ function detectTableLines(lines: Line[]): { skipSet: Set<number>; protectedRegio
 function drawTranslatedPage(
   originalCanvas: HTMLCanvasElement,
   lines: Line[],
+  paragraphs: Para[],
   translatedMap: Record<number, string | null>,
-  skipLines: Set<number>,
-  protectedRegions: Region[],
-  scale: number
+  protectedRegions: Region[]
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = originalCanvas.width;
@@ -331,81 +395,89 @@ function drawTranslatedPage(
     return out.length ? out : [text];
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    if (skipLines.has(i)) continue;
-    const line = lines[i];
-    const translated = translatedMap[i];
+  for (const para of paragraphs) {
+    const translated = translatedMap[para._idx];
     // null/undefined → skip entirely (leave original visible)
     // "" → erase-only (cover original, draw nothing)
-    // string → cover original, draw translated text
-    if (translated === null || translated === undefined || !line.items.length) continue;
+    // string → cover original paragraph, draw translated text as a block
+    if (translated === null || translated === undefined) continue;
 
-    const items = line.items;
-    const origAvgFs = items.reduce((s, it) => s + (it.fontSize > 0 ? it.fontSize : 12), 0) / items.length;
-    let minX = Infinity, maxX = -Infinity;
-    const baseline = line.baseY;
-    for (const it of items) { minX = Math.min(minX, it.cx); maxX = Math.max(maxX, it.cx + Math.max(it.width, 4)); }
+    // Paragraph bounding box + dominant style
+    let minX = Infinity, maxX = -Infinity, topY = Infinity, botY = -Infinity;
+    let fsSum = 0, fsCount = 0;
+    let isBold = false, isItalic = false;
+    for (const li of para.lineIdxs) {
+      const line = lines[li];
+      if (!line.items.length) continue;
+      const fs = lineAvgFs(line);
+      fsSum += fs * line.items.length;
+      fsCount += line.items.length;
+      for (const it of line.items) {
+        minX = Math.min(minX, it.cx);
+        maxX = Math.max(maxX, it.cx + Math.max(it.width, 4));
+        if (/bold/i.test(it.fontName)) isBold = true;
+        if (/italic|oblique/i.test(it.fontName)) isItalic = true;
+      }
+      topY = Math.min(topY, line.baseY - fs * 0.85);
+      botY = Math.max(botY, line.baseY + fs * 0.25);
+    }
+    if (minX >= Infinity || botY - topY <= 0 || maxX - minX <= 0 || fsCount === 0) continue;
+    const avgFs = fsSum / fsCount;
 
-    const ascent = origAvgFs * 0.85, descender = origAvgFs * 0.25;
-    const byTop = baseline - ascent, byBot = baseline + descender;
-    const origLineH = byBot - byTop;
-    if (origLineH <= 0 || maxX - minX <= 0) continue;
+    const bx = minX - 1, by = topY - 1;
+    const boxW = maxX - minX + 2, boxH = botY - topY + 2;
 
-    const bx = minX - 1, by = byTop - 1;
-    const bwOrig = maxX - minX + 2, bhOrig = origLineH + 2;
-
-    if (overlapsRegion(bx, by, bwOrig, bhOrig, protectedRegions)) continue;
+    if (overlapsRegion(bx, by, boxW, boxH, protectedRegions)) continue;
 
     // Erase-only: cover the orphaned fragment with background, draw nothing
     if (!translated) {
-      const eraseBg = sampleBackground(ctx, bx, by, bwOrig, bhOrig);
+      const eraseBg = sampleBackground(ctx, bx, by, boxW, boxH);
       ctx.fillStyle = eraseBg;
-      ctx.fillRect(bx, by, bwOrig + 2, bhOrig);
+      ctx.fillRect(bx, by, boxW + 2, boxH);
       continue;
     }
 
-    // Use origAvgFs for every line so translated text matches the original
-    // document's font size exactly — avoids the "all body text same size" issue
-    let drawFs = origAvgFs;
     const rightLimit = canvas.width - PAGE_RIGHT;
-    const wrapWidth = Math.min(Math.max(bwOrig, rightLimit - minX), rightLimit - minX);
+    const wrapWidth = Math.max(40, Math.min(Math.max(boxW * 1.02, avgFs * 8), rightLimit - minX));
     if (wrapWidth < 20) continue;
 
+    // Available height: paragraph box plus slack down to the next content below
     let nextTop = canvas.height - PAGE_BOTTOM;
-    for (let j = i + 1; j < lines.length; j++) {
-      if (!lines[j].items.length) continue;
-      const nxFs = lines[j].items.reduce((s, it) => s + (it.fontSize > 0 ? it.fontSize : 12), 0) / lines[j].items.length;
-      nextTop = Math.min(nextTop, lines[j].baseY - nxFs * 0.85);
-      break;
+    const memberSet = new Set(para.lineIdxs);
+    for (let li = 0; li < lines.length; li++) {
+      if (memberSet.has(li) || !lines[li].items.length) continue;
+      const fs = lineAvgFs(lines[li]);
+      const top = lines[li].baseY - fs * 0.85;
+      if (top > botY - 2) nextTop = Math.min(nextTop, top);
     }
-    // Cap at 1.6× original line height to prevent overlap with the next line
-    const availH = Math.min(Math.max(origLineH, nextTop - byTop), origLineH * 1.6);
+    const availH = Math.min(Math.max(boxH, nextTop - topY - 2), boxH * 1.6);
 
-    const isBold = items.some((it) => /bold/i.test(it.fontName));
-    const isItalic = items.some((it) => /italic|oblique/i.test(it.fontName));
     const fontStyle = (isBold ? "bold " : "") + (isItalic ? "italic " : "");
     const isRTL = /[֑-߿‏‫]/.test(translated);
 
+    // Fit: shrink font until the wrapped block fits the available height
+    let drawFs = avgFs;
     let wrappedLines: string[] = [];
-    const MIN_SCALE = 0.62;
-    const initialFs = drawFs;
-    for (let tryS = 1.0; tryS >= MIN_SCALE - 0.001; tryS -= 0.1) {
-      drawFs = initialFs * tryS;
+    const MIN_SCALE = 0.6;
+    for (let tryS = 1.0; tryS >= MIN_SCALE - 0.001; tryS -= 0.05) {
+      drawFs = avgFs * tryS;
       ctx.font = `${fontStyle}${drawFs}px sans-serif`;
       wrappedLines = wrapText(translated, wrapWidth);
       if (wrappedLines.length * drawFs * LINE_GAP <= availH || tryS <= MIN_SCALE + 0.001) break;
     }
 
-    const bgColor = sampleBackground(ctx, bx, by, bwOrig, bhOrig);
+    const bgColor = sampleBackground(ctx, bx, by, boxW, boxH);
     const textColor = getContrastColor(bgColor);
     const lineStep = drawFs * LINE_GAP;
     const totalDrawH = Math.min(wrappedLines.length * lineStep + drawFs * 0.3, availH);
-    const coverW = wrappedLines.length > 1 ? wrapWidth : bwOrig;
+    const coverW = wrappedLines.length > 1
+      ? wrapWidth
+      : Math.min(wrapWidth, Math.max(boxW, ctx.measureText(wrappedLines[0] ?? "").width + 4));
 
-    let finalCoverH = totalDrawH;
+    let finalCoverH = Math.max(boxH, totalDrawH);
     for (const r of protectedRegions) {
       if (bx + coverW + 2 < r.x1 || bx > r.x2) continue;
-      if (r.y1 > by && r.y1 < by + finalCoverH) finalCoverH = Math.max(origLineH, r.y1 - by - 2);
+      if (r.y1 > by && r.y1 < by + finalCoverH) finalCoverH = Math.max(boxH, r.y1 - by - 2);
     }
 
     ctx.fillStyle = bgColor;
@@ -415,10 +487,11 @@ function drawTranslatedPage(
     ctx.direction = isRTL ? "rtl" : "ltr";
     ctx.font = `${fontStyle}${drawFs}px sans-serif`;
 
+    const firstBaseline = topY + drawFs * 0.85;
     for (let li = 0; li < wrappedLines.length; li++) {
-      const y = baseline + li * lineStep;
+      const y = firstBaseline + li * lineStep;
       if (y - drawFs > by + finalCoverH) break;
-      ctx.fillText(wrappedLines[li], isRTL ? minX + wrapWidth : minX, y, wrapWidth);
+      ctx.fillText(wrappedLines[li], isRTL ? minX + wrapWidth : minX, y, coverW);
     }
     ctx.direction = "ltr";
   }
@@ -471,8 +544,8 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function translateChunk(lineTexts: LineText[], contextSummary: string): Promise<{ results: (string | null)[]; newContext: string }> {
-    const lines = lineTexts.map((lt) => lt.text);
+  async function translateChunk(units: { text: string }[], contextSummary: string): Promise<{ results: (string | null)[]; newContext: string }> {
+    const lines = units.map((u) => u.text);
     totalCharsRef.current += lines.reduce((s, l) => s + l.length, 0);
 
     // Retry transient failures — a single network blip on page 9 of 10 should
@@ -598,7 +671,6 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
         }
 
         const lines = groupIntoLines(items);
-        reconnectHyphens(lines);
         const { skipSet, protectedRegions } = detectTableLines(lines);
 
         // Also detect drawn table borders from PDF operators
@@ -679,88 +751,61 @@ export function PdfTranslatorClient({ file, targetLanguage, translateTerms, onCo
           return { ...lt, _idx: idx };
         });
 
-        const translatableLines = lineTexts.filter((lt) => !skipSet.has(lt._idx) && lt.text.trim().length > 0);
-        addLog(tr.linesToTranslate(pageNum, translatableLines.length));
+        // Group lines into paragraphs — the model sees whole sentences, so no
+        // second cleanup pass is needed (the old line-level pipeline chopped
+        // sentences and re-sent the entire page to GPT to repair them)
+        const paragraphs = groupIntoParagraphs(lines, lineTexts, skipSet);
+        addLog(tr.blocksToTranslate(pageNum, paragraphs.length));
 
-        const chunks = makeChunks(translatableLines, CHUNK_SIZE);
+        const chunks = makeChunks(paragraphs, CHUNK_SIZE);
         // Values: null = skip (show original), "" = erase-only (cover but draw nothing), string = draw
-        const translatedMap: Record<number, string | null> = {};
+        const paraTranslated: Record<number, string | null> = {};
 
         for (let ci = 0; ci < chunks.length; ci++) {
           addLog(tr.chunk(pageNum, ci + 1, chunks.length));
           const { results, newContext } = await translateChunk(chunks[ci], contextSummary);
           contextSummary = newContext;
-          chunks[ci].forEach((lt, li) => {
-            const t = results[li];
-            const rawText = lt.text.trim();
+          chunks[ci].forEach((para, pi) => {
+            const t = results[pi];
+            const rawText = para.text.trim();
             // Short fragment that the model couldn't translate (returned null) —
             // use erase-only so the orphaned word gets covered rather than
             // floating visibly in an otherwise-translated canvas
             if (t === null && rawText.length <= 15 && rawText.split(/\s+/).length <= 2 && !(targetIsCyrillic && isCyrillicText(rawText))) {
-              translatedMap[lt._idx] = "";
+              paraTranslated[para._idx] = "";
             } else if (targetIsCyrillic) {
-              // Skip lines already in the target script (headers/footers etc.)
-              translatedMap[lt._idx] = (t && !isCyrillicText(lt.text)) || isCyrillicText(t ?? "") ? t : null;
+              // Skip paragraphs already in the target script (headers/footers etc.)
+              paraTranslated[para._idx] = (t && !isCyrillicText(para.text)) || isCyrillicText(t ?? "") ? t : null;
             } else {
-              translatedMap[lt._idx] = t;
+              paraTranslated[para._idx] = t;
             }
           });
           setProgressState(tr.pageOf(pageNum, totalPages), pageBase + ((ci + 1) / chunks.length) * (88 / totalPages));
         }
 
-        // Quality-check pass: send original + translated pairs back through GPT
-        // with full page context so it can fix cut sentences and orphaned English
-        if (translatableLines.length > 0) {
-          addLog(tr.qualityCheck(pageNum));
+        // After the first page: build a glossary from what was just translated
+        // so later pages reuse the same terminology
+        if (pageNum === 1 && totalPages > 1 && glossaryRef.current.length === 0 && paragraphs.length > 0) {
           try {
-            const originalTexts = translatableLines.map((lt) => lt.text);
-            const translatedTexts = translatableLines.map((lt) => translatedMap[lt._idx] ?? null);
-            const cleanRes = await fetch("/api/translate/cleanup", {
+            const glossRes = await fetch("/api/translate/glossary", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                original: originalTexts,
-                translated: translatedTexts,
+                original: paragraphs.map((p) => p.text),
+                translated: paragraphs.map((p) => paraTranslated[p._idx] ?? null),
                 targetLanguage,
                 pdfToken: pdfTokenRef.current,
-                glossary: glossaryRef.current.length > 0 ? glossaryRef.current : undefined,
               }),
             });
-            if (cleanRes.ok) {
-              const cleanData = await cleanRes.json();
-              const cleaned: (string | null)[] = cleanData.lines ?? translatedTexts;
-              translatableLines.forEach((lt, li) => {
-                const c = cleaned[li];
-                if (c !== undefined) translatedMap[lt._idx] = c;
-              });
-              addLog(tr.qualityCheckDone(pageNum), "done");
+            if (glossRes.ok) {
+              const { glossary } = await glossRes.json();
+              if (Array.isArray(glossary)) glossaryRef.current = glossary;
             }
-
-            // After the first page: build a glossary from what was just
-            // translated so later pages reuse the same terminology
-            if (pageNum === 1 && totalPages > 1 && glossaryRef.current.length === 0) {
-              try {
-                const glossRes = await fetch("/api/translate/glossary", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    original: originalTexts,
-                    translated: translatableLines.map((lt) => translatedMap[lt._idx] ?? null),
-                    targetLanguage,
-                    pdfToken: pdfTokenRef.current,
-                  }),
-                });
-                if (glossRes.ok) {
-                  const { glossary } = await glossRes.json();
-                  if (Array.isArray(glossary)) glossaryRef.current = glossary;
-                }
-              } catch { /* glossary is best-effort */ }
-            }
-          } catch { /* non-critical — continue with first-pass translation */ }
+          } catch { /* glossary is best-effort */ }
         }
 
         addLog(tr.compositing(pageNum));
-        const dataUrl = drawTranslatedPage(canvas, lines, translatedMap, skipSet, protectedRegions, SCALE);
+        const dataUrl = drawTranslatedPage(canvas, lines, paragraphs, paraTranslated, protectedRegions);
         renderedPages.push({ imageDataUrl: dataUrl, width: nativeViewport.width, height: nativeViewport.height });
         addLog(tr.pageDone(pageNum), "done");
       }
