@@ -28,6 +28,25 @@ const ASTEROIDS = [
   { top: "55%", left: "40%", w: 3, h: 2, dur: 48, delay: 20, rot: -40 },
 ];
 
+// Deterministic positions (no Math.random at render) — stable across SSR/CSR
+const GLOW_STARS = [
+  { top: "14%", left: "22%", size: 2, dur: 4.2, delay: 0.0 },
+  { top: "27%", left: "71%", size: 3, dur: 5.6, delay: 1.3 },
+  { top: "44%", left: "9%",  size: 2, dur: 3.8, delay: 2.1 },
+  { top: "58%", left: "84%", size: 2, dur: 6.4, delay: 0.7 },
+  { top: "71%", left: "31%", size: 3, dur: 4.9, delay: 3.4 },
+  { top: "83%", left: "62%", size: 2, dur: 5.2, delay: 1.9 },
+  { top: "8%",  left: "48%", size: 2, dur: 4.5, delay: 2.8 },
+  { top: "37%", left: "43%", size: 2, dur: 6.1, delay: 4.2 },
+];
+
+// Shooting stars streak once per cycle (long invisible pause, brief streak)
+const SHOOTING_STARS = [
+  { top: "10%", left: "12%", dur: 14, delay: 3 },
+  { top: "34%", left: "52%", dur: 23, delay: 9 },
+  { top: "5%",  left: "68%", dur: 31, delay: 17 },
+];
+
 const STYLES = `
   @keyframes orbit-star-drift {
     from { transform: translateY(0px);      }
@@ -43,9 +62,25 @@ const STYLES = `
     50%        { transform: translate(-5px, -6px)   rotate(calc(var(--rot) + 2deg)); }
     75%        { transform: translate(4px,   9px)   rotate(calc(var(--rot) - 4deg)); }
   }
+  @keyframes orbit-glow-twinkle {
+    0%, 100% { opacity: 0.85; transform: scale(1); }
+    50%       { opacity: 0.25; transform: scale(0.8); }
+  }
+  @keyframes orbit-shooting {
+    0%, 90%  { opacity: 0; transform: translate3d(0, 0, 0) rotate(29deg); }
+    92%       { opacity: 1; }
+    100%      { opacity: 0; transform: translate3d(46vw, 25vw, 0) rotate(29deg); }
+  }
+  @keyframes orbit-nebula-breathe {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .orbit-star-layer,
-    .orbit-asteroid-rock { animation: none !important; }
+    .orbit-asteroid-rock,
+    .orbit-glow-star,
+    .orbit-nebula { animation: none !important; }
+    .orbit-shooting-star { display: none !important; }
   }
 `;
 
@@ -160,9 +195,77 @@ export function StarBackground() {
           />
         ))}
 
-        {/* ── Nebula glow orbs (static, cheap radial-gradient) ───────────── */}
+        {/* ── Bright glow stars — independent staggered twinkle ──────────── */}
+        {GLOW_STARS.map((s, i) => (
+          <div
+            key={`g${i}`}
+            className="orbit-glow-star absolute"
+            style={{
+              top: s.top,
+              left: s.left,
+              width: s.size,
+              height: s.size,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.95)",
+              boxShadow: "0 0 6px 1px rgba(196,181,253,0.55)",
+              animation: `orbit-glow-twinkle ${s.dur}s ease-in-out infinite`,
+              animationDelay: `${s.delay}s`,
+            }}
+          />
+        ))}
+
+        {/* ── Shooting stars — brief streak, long pause ──────────────────── */}
+        {SHOOTING_STARS.map((s, i) => (
+          <div
+            key={`s${i}`}
+            className="orbit-shooting-star absolute"
+            style={{
+              top: s.top,
+              left: s.left,
+              width: 110,
+              height: 2,
+              borderRadius: 999,
+              opacity: 0,
+              // Bright head on the leading (right) edge, tail fading left
+              background:
+                "linear-gradient(to left, rgba(255,255,255,0.9), rgba(167,139,250,0.35) 35%, transparent 80%)",
+              animation: `orbit-shooting ${s.dur}s linear infinite`,
+              animationDelay: `${s.delay}s`,
+            }}
+          />
+        ))}
+
+        {/* ── Distant ringed planet (far background) ─────────────────────── */}
+        <div className="absolute" style={{ top: "62%", left: "7%", opacity: 0.5 }}>
+          <div
+            style={{
+              position: "relative",
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 35% 32%, rgba(147,197,253,0.7) 0%, rgba(29,78,216,0.5) 55%, rgba(13,13,43,0.9) 100%)",
+              boxShadow: "0 0 10px rgba(59,130,246,0.25)",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: 40,
+                height: 12,
+                transform: "translate(-50%, -50%) rotate(-24deg)",
+                borderRadius: "50%",
+                border: "1px solid rgba(147,197,253,0.35)",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* ── Nebula glow orbs (slow breathing radial-gradient) ──────────── */}
         <div
-          className="absolute inset-0"
+          className="orbit-nebula absolute inset-0"
           style={{
             background: `
               radial-gradient(ellipse 40% 30% at 15% 25%, rgba(124,58,237,0.07) 0%, transparent 100%),
@@ -170,6 +273,7 @@ export function StarBackground() {
               radial-gradient(ellipse 30% 25% at 58% 78%, rgba(6,182,212,0.05) 0%, transparent 100%),
               radial-gradient(ellipse 25% 20% at 90% 70%, rgba(124,58,237,0.04) 0%, transparent 100%)
             `,
+            animation: "orbit-nebula-breathe 45s ease-in-out infinite",
           }}
         />
       </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { RingedPlanet, Constellation } from "@/components/ui/CosmicDecor";
 import { FileText, Zap, Shield, Globe, ArrowRight, CheckCircle } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
@@ -18,6 +19,10 @@ export default function HomePage() {
         {/* Glow orbs */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-cosmos-purple-bright/10 blur-3xl pointer-events-none" />
         <div className="absolute top-1/3 left-1/4 w-64 h-64 rounded-full bg-cosmos-blue-bright/8 blur-3xl pointer-events-none" />
+
+        {/* Cosmic decorations */}
+        <RingedPlanet className="absolute right-[7%] top-[16%] hidden lg:block opacity-90" />
+        <Constellation className="absolute left-[9%] top-[22%] hidden md:block opacity-70" />
 
         {/* Heading */}
         <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold text-cosmos-star mb-6 leading-tight max-w-4xl">

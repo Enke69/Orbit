@@ -131,8 +131,8 @@ Server component fetches all users; client component renders plan assignment UI.
 ### Design System
 Two glow effects only: `shadow-cosmic` (ambient) and `shadow-nebula` (focused highlight) — don't add more gradient/glow utilities. Brand accent: the хээ (alkhan khee) Mongolian meander ornament via `.khee-divider` (horizontal strip) and `.khee-top` (card top accent, needs extra top padding), both defined in `globals.css` as inline SVG backgrounds.
 
-### Background (`src/components/ui/StarBackground.tsx`)
-CSS `box-shadow` star field — 3 tiers (180×1px, 60×2px, 25×3px) with dual-panel seamless vertical drift. Generated in `useEffect` to avoid SSR hydration mismatch. Asteroid divs use `orbit-asteroid` keyframe. Respects `prefers-reduced-motion`.
+### Background (`src/components/ui/StarBackground.tsx` + `src/components/ui/CosmicDecor.tsx`)
+CSS `box-shadow` star field — 3 tiers (180×1px, 60×2px, 25×3px) with dual-panel seamless vertical drift, generated in `useEffect` to avoid SSR hydration mismatch. Plus: staggered glow-twinkle stars, shooting stars (brief streak/long pause), floating asteroids, a distant ringed planet, and breathing nebula gradients — all deterministic positions (no render-time `Math.random`). `CosmicDecor.tsx` exports `RingedPlanet` (Saturn-style with orbiting moon, home hero) and `Constellation` (Долоон бурхан / Big Dipper, hero + signin). Everything is CSS-only, `pointer-events-none`, `aria-hidden`, and disabled under `prefers-reduced-motion`.
 
 ### Assets
 - Logo + favicon: `public/images/orbit-logo.png`

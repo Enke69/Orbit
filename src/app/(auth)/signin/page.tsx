@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import Image from "next/image";
+import { Constellation } from "@/components/ui/CosmicDecor";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 
@@ -21,6 +22,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-cosmos-purple-bright/8 blur-3xl pointer-events-none" />
+      <Constellation className="absolute right-[12%] top-[16%] hidden md:block opacity-60" />
 
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
