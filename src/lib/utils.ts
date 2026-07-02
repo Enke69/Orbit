@@ -16,16 +16,6 @@ export function formatCharCount(count: number): string {
   return count.toString();
 }
 
-export function calculateOverageChars(used: number, paid: number, free: number): number {
-  const totalAllowance = free + paid;
-  return Math.max(0, used - totalAllowance);
-}
-
-export function calculateOverageCost(overageChars: number, centsPerUnit: number, charsPerUnit: number): number {
-  const units = Math.ceil(overageChars / charsPerUnit);
-  return units * centsPerUnit;
-}
-
 export function getFileExtension(filename: string): string {
   return filename.split(".").pop()?.toLowerCase() ?? "";
 }

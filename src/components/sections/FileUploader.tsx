@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, FileText, X, AlertCircle } from "lucide-react";
 import { cn, formatFileSize, isAllowedFileType } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 interface FileUploaderProps {
   onFileSelect: (file: File) => void;
@@ -11,6 +13,8 @@ interface FileUploaderProps {
 }
 
 export function FileUploader({ onFileSelect, disabled }: FileUploaderProps) {
+  const { lang } = useLanguage();
+  const tr = t[lang].uploader;
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +22,7 @@ export function FileUploader({ onFileSelect, disabled }: FileUploaderProps) {
     setError(null);
 
     if ((rejectedFiles as {file: File}[]).length > 0) {
-      setError("Only PDF, DOC, and DOCX files are supported.");
+      setError(tr.unsupported);
       return;
     }
 
@@ -26,18 +30,18 @@ export function FileUploader({ onFileSelect, disabled }: FileUploaderProps) {
     if (!file) return;
 
     if (!isAllowedFileType(file.name)) {
-      setError("Only PDF, DOC, and DOCX files are supported.");
+      setError(tr.unsupported);
       return;
     }
 
     if (file.size > 50 * 1024 * 1024) {
-      setError("File must be under 50 MB.");
+      setError(tr.tooLarge);
       return;
     }
 
     setSelectedFile(file);
     onFileSelect(file);
-  }, [onFileSelect]);
+  }, [onFileSelect, tr]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -69,6 +73,7 @@ export function FileUploader({ onFileSelect, disabled }: FileUploaderProps) {
         </div>
         <button
           onClick={clearFile}
+          aria-label={tr.removeFile}
           className="text-cosmos-dust hover:text-red-400 transition-colors p-1"
           disabled={disabled}
         >
@@ -102,16 +107,16 @@ export function FileUploader({ onFileSelect, disabled }: FileUploaderProps) {
           </div>
           <div>
             <p className="text-cosmos-star font-medium">
-              {isDragActive ? "Drop your file here" : "Drag & drop your document"}
+              {isDragActive ? tr.dropHere : tr.dragDrop}
             </p>
-            <p className="text-cosmos-dust text-sm mt-1">or click to browse</p>
+            <p className="text-cosmos-dust text-sm mt-1">{tr.orBrowse}</p>
           </div>
-          <p className="text-xs text-cosmos-dust/60">PDF, DOC, DOCX · Max 50 MB</p>
+          <p className="text-xs text-cosmos-dust/60">{tr.fileTypes}</p>
         </div>
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+        <div role="alert" className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
           <AlertCircle size={15} />
           {error}
         </div>

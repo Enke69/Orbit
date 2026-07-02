@@ -40,8 +40,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        mono: ["var(--font-mono)", "monospace"],
-        display: ["var(--font-outfit)", "system-ui", "sans-serif"],
+        mono: ["ui-monospace", "monospace"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
       },
       backgroundImage: {
         "cosmic-gradient": "linear-gradient(135deg, #05060f 0%, #0d0d2b 50%, #1a1a3e 100%)",

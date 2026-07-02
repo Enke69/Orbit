@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { FileText, Plus, History, Clock, Download, Crown, Zap, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -114,7 +115,13 @@ export function DashboardView({ userName, plan, planExpiresAt, isAdmin, dailyCou
                 {dailyCount}
                 <span className="text-lg text-cosmos-dust font-normal"> / {limits.daily}</span>
               </p>
-              <p className="text-xs text-cosmos-dust mt-1">{tr.dailyLimit}</p>
+              <ProgressBar
+                value={(dailyCount / limits.daily) * 100}
+                showPercent={false}
+                size="sm"
+                className="mt-3"
+              />
+              <p className="text-xs text-cosmos-dust mt-2">{tr.dailyLimit}</p>
             </>
           )}
         </Card>
@@ -137,7 +144,13 @@ export function DashboardView({ userName, plan, planExpiresAt, isAdmin, dailyCou
                 {monthlyCount}
                 <span className="text-lg text-cosmos-dust font-normal"> / {limits.monthly}</span>
               </p>
-              <p className="text-xs text-cosmos-dust mt-1">{tr.monthlyLimit}</p>
+              <ProgressBar
+                value={(monthlyCount / limits.monthly) * 100}
+                showPercent={false}
+                size="sm"
+                className="mt-3"
+              />
+              <p className="text-xs text-cosmos-dust mt-2">{tr.monthlyLimit}</p>
             </>
           ) : (
             <>

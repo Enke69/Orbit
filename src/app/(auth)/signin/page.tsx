@@ -5,8 +5,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import Image from "next/image";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 
 export default function SignInPage() {
+  const { lang } = useLanguage();
+  const tr = t[lang].signin;
   const [loading, setLoading] = useState(false);
 
   async function handleGoogle() {
@@ -24,8 +28,8 @@ export default function SignInPage() {
             <Image src="/images/orbit-logo.png" alt="Orbit" width={40} height={40} className="rounded-full" />
             <span className="font-display font-bold text-2xl text-cosmos-star">Orbit</span>
           </Link>
-          <h1 className="mt-6 text-2xl font-bold text-cosmos-star font-display">Welcome</h1>
-          <p className="mt-2 text-cosmos-dust text-sm">Sign in to start translating</p>
+          <h1 className="mt-6 text-2xl font-bold text-cosmos-star font-display">{tr.welcome}</h1>
+          <p className="mt-2 text-cosmos-dust text-sm">{tr.subtitle}</p>
         </div>
 
         <div className="glass-card rounded-2xl p-8 shadow-cosmic">
@@ -37,15 +41,16 @@ export default function SignInPage() {
             loading={loading}
           >
             <GoogleIcon />
-            Continue with Google
+            {tr.continueGoogle}
           </Button>
         </div>
 
-        <p className="text-center mt-6 text-xs text-cosmos-dust/40">
-          By signing in you agree to our{" "}
-          <Link href="/terms" className="underline hover:text-cosmos-dust">Terms</Link>{" "}
-          and{" "}
-          <Link href="/privacy" className="underline hover:text-cosmos-dust">Privacy Policy</Link>.
+        <p className="text-center mt-6 text-xs text-cosmos-dust/60">
+          {tr.agreePrefix}{" "}
+          <Link href="/terms" className="underline hover:text-cosmos-dust">{tr.termsLink}</Link>{" "}
+          {tr.and}{" "}
+          <Link href="/privacy" className="underline hover:text-cosmos-dust">{tr.privacyLink}</Link>
+          {tr.agreeSuffix}
         </p>
       </div>
     </div>

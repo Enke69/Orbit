@@ -7,10 +7,11 @@ export type Lang = "en" | "mn";
 const LanguageContext = createContext<{
   lang: Lang;
   toggle: () => void;
-}>({ lang: "en", toggle: () => {} });
+}>({ lang: "mn", toggle: () => {} });
 
+// Mongolian-first: default to MN unless the user explicitly chose EN before
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>("en");
+  const [lang, setLang] = useState<Lang>("mn");
 
   useEffect(() => {
     const saved = localStorage.getItem("orbit-lang") as Lang | null;
