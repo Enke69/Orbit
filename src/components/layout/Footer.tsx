@@ -51,11 +51,11 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-cosmos-purple-bright/10 mb-6" />
+        {/* Хээ ornament divider */}
+        <div className="khee-divider max-w-[200px] mx-auto mb-6 opacity-60" aria-hidden="true" />
 
         {/* Legal */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-cosmos-dust/40">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-cosmos-dust/60">
           <p>© {year} Orbit. {tr.footer.copyright}</p>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-cosmos-dust/70 transition-colors">

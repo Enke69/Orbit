@@ -282,7 +282,7 @@ export default function TranslatePage() {
             >
               {scanning ? tr.scanning : tr.translate} <ArrowRight size={16} />
             </Button>
-            <p className="text-center text-xs text-cosmos-dust/50">{tr.usageNote}</p>
+            <p className="text-center text-xs text-cosmos-dust/70">{tr.usageNote}</p>
           </div>
         )}
 

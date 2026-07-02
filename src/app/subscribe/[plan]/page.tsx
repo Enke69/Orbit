@@ -82,7 +82,7 @@ export default function SubscribePage({ params }: { params: { plan: string } }) 
         <span className="font-display font-bold text-xl text-cosmos-star tracking-tight">Orbit</span>
       </Link>
 
-      <div className="w-full max-w-md glass-card rounded-2xl p-8 border border-cosmos-purple-bright/20 shadow-cosmic space-y-6 text-center">
+      <div className="khee-top w-full max-w-md glass-card rounded-2xl p-8 pt-10 border border-cosmos-purple-bright/20 shadow-cosmic space-y-6 text-center">
         {/* Plan badge */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cosmos-purple-bright/30 bg-cosmos-purple-bright/10 text-sm text-cosmos-purple-light font-semibold">
           {badge}
@@ -108,7 +108,7 @@ export default function SubscribePage({ params }: { params: { plan: string } }) 
           </div>
         </div>
 
-        <p className="text-xs text-cosmos-dust/50">{tr.note}</p>
+        <p className="text-xs text-cosmos-dust/70">{tr.note}</p>
 
         <div className="flex flex-col gap-2 pt-2">
           <Link href="/dashboard">

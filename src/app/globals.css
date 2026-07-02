@@ -66,18 +66,6 @@ body {
   text-shadow: 0 0 20px rgba(167, 139, 250, 0.5);
 }
 
-/* Shimmer loading */
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(124, 58, 237, 0.1) 25%,
-    rgba(167, 139, 250, 0.2) 50%,
-    rgba(124, 58, 237, 0.1) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
 /* Cosmic button */
 .btn-cosmic {
   background: linear-gradient(135deg, #7c3aed 0%, #4c2a94 100%);
@@ -93,18 +81,42 @@ body {
   transform: translateY(0);
 }
 
-/* Orbit ring animation */
-.orbit-ring {
-  border: 1px solid rgba(124, 58, 237, 0.3);
-  border-radius: 50%;
-  animation: spin 12s linear infinite;
-}
-
 /* Progress bar */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
 .progress-cosmic {
   background: linear-gradient(90deg, #7c3aed, #3b82f6, #06b6d4);
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
+}
+
+/* Хээ (alkhan khee) — traditional Mongolian meander ornament, used as a
+   subtle brand accent on dividers and featured cards */
+.khee-divider {
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12' fill='none' stroke='%23a78bfa' stroke-opacity='0.55' stroke-width='1.3'%3E%3Cpath d='M0 10 V2 H8 V6 H4 V10 H12 V2 H20 V6 H16 V10 H24'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 24px 12px;
+}
+
+.khee-top {
+  position: relative;
+  overflow: hidden;
+}
+.khee-top::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 20px;
+  right: 20px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12' viewBox='0 0 24 12' fill='none' stroke='%23a78bfa' stroke-opacity='0.55' stroke-width='1.3'%3E%3Cpath d='M0 10 V2 H8 V6 H4 V10 H12 V2 H20 V6 H16 V10 H24'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 24px 12px;
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 @layer utilities {

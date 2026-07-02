@@ -49,6 +49,9 @@ export default function HomePage() {
         </p>
       </section>
 
+      {/* Хээ ornament divider */}
+      <div className="khee-divider max-w-xs mx-auto opacity-70" aria-hidden="true" />
+
       {/* Features */}
       <section className="max-w-6xl mx-auto px-4 py-20">
         <h2 className="font-display text-3xl font-bold text-cosmos-star text-center mb-12">
@@ -68,14 +71,18 @@ export default function HomePage() {
       </section>
 
       {/* Pricing */}
-      <section className="max-w-4xl mx-auto px-4 py-20">
+      <section className="max-w-6xl mx-auto px-4 py-20">
         <h2 className="font-display text-3xl font-bold text-cosmos-star text-center mb-4">{tr.pricingHeading}</h2>
         <p className="text-cosmos-dust text-center mb-12">{tr.pricingSub}</p>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
           {tr.plans.map((plan) => (
             <Card
               key={plan.name}
-              className={plan.featured ? "border-cosmos-purple-bright/50 shadow-cosmic" : ""}
+              className={
+                plan.featured
+                  ? "khee-top border-cosmos-purple-bright/50 shadow-cosmic lg:scale-[1.04] flex flex-col pt-8"
+                  : "flex flex-col"
+              }
               glow={plan.featured}
             >
               {plan.featured && (
@@ -96,15 +103,18 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Link href={
-                plan.name === "Free" || plan.name === "Үнэгүй"
-                  ? "/dashboard"
-                  : plan.name === "VIP"
-                  ? "/subscribe/vip"
-                  : plan.name === "Weekly" || plan.name === "7 хоног"
-                  ? "/subscribe/weekly"
-                  : "/subscribe/monthly"
-              }>
+              <Link
+                className="mt-auto"
+                href={
+                  plan.name === "Free" || plan.name === "Үнэгүй"
+                    ? "/dashboard"
+                    : plan.name === "VIP"
+                    ? "/subscribe/vip"
+                    : plan.name === "Weekly" || plan.name === "7 хоног"
+                    ? "/subscribe/weekly"
+                    : "/subscribe/monthly"
+                }
+              >
                 <Button variant={plan.featured ? "cosmic" : "outline"} className="w-full">
                   {plan.cta}
                 </Button>
